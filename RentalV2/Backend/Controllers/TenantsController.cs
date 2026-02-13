@@ -1,3 +1,4 @@
+using Microsoft.AspNetCore.Authorization;
 using Microsoft.AspNetCore.Mvc;
 using Microsoft.EntityFrameworkCore;
 using RentalBackend.Data;
@@ -5,6 +6,7 @@ using RentalBackend.Models;
 
 namespace RentalBackend.Controllers
 {
+    [Authorize]
     [ApiController]
     [Route("api/[controller]")]
     public class TenantsController : ControllerBase
@@ -17,409 +19,316 @@ namespace RentalBackend.Controllers
         }
 
         [HttpGet]
-        public async Task<ActionResult<IEnumerable<object>>> GetTenants(int? year, bool? includeUnassigned)
+        public async Task<ActionResult<IEnumerable<object>>> GetTenants(int? year, int? month)
         {
-            var targetYear = year ?? DateTime.UtcNow.Year;
-            var yearStart = new DateTime(targetYear, 1, 1, 0, 0, 0, DateTimeKind.Utc);
-            var yearEnd = new DateTime(targetYear, 12, 31, 23, 59, 59, DateTimeKind.Utc);
-            var today = DateTime.UtcNow;
+            // If period specified, show tenants based on ledger data for that month
+            if (month != null && year != null)
+            {
+                var period = new DateOnly(year.Value, month.Value, 1);
+                var ledgers = await _context.MonthlyLedgers
+                    .Include(l => l.Tenant)
+                    .Include(l => l.Flat)
+                    .Where(l => l.Period == period && l.TenantId != null)
+                    .OrderBy(l => l.Tenant!.Name)
+                    .ToListAsync();
 
+                var result = ledgers.Select(l => new
+                {
+                    Id = l.TenantId,
+                    TenantId = l.TenantId,
+                    Name = l.Tenant?.Name ?? "VACANT",
+                    FirstName = l.Tenant?.Name ?? "VACANT",
+                    LastName = "",
+                    PhoneNumber = (string?)null,
+                    Email = (string?)null,
+                    Address = (string?)null,
+                    IsActive = true,
+                    IsAssigned = true,
+                    RoomNumber = l.Flat?.RoomCode,
+                    FlatId = l.FlatId,
+                    MonthlyRent = l.MonthlyRent,
+                    SecurityDeposit = l.ElectricSecurity,
+                    StartDate = l.DateOfAllotment?.ToDateTime(TimeOnly.MinValue),
+                    NeedsRentIncrease = false,
+                    ClosingBalance = l.ClosingBalance
+                });
+
+                return Ok(result);
+            }
+
+            // Default: show all tenants with current occupancy
             var tenants = await _context.Tenants
-                .Include(t => t.RentAgreements)
-                    .ThenInclude(ra => ra.Room)
-                .Include(t => t.Payments)
+                .Include(t => t.Occupancies)
+                    .ThenInclude(o => o.Flat)
+                .OrderBy(t => t.Name)
                 .ToListAsync();
 
-            // Build result for all tenants
-            var result = tenants
-                .Where(t => 
-                    // Include unassigned tenants if requested
-                    (includeUnassigned == true && !t.RentAgreements.Any()) ||
-                    // Or tenants who had agreements active in the selected year
-                    t.RentAgreements.Any(ra => 
-                        ra.StartDate <= yearEnd && 
-                        (ra.EndDate == null || ra.EndDate >= yearStart || ra.IsActive)))
-                .Select(t => {
-                    var activeAgreement = t.RentAgreements.FirstOrDefault(ra => ra.IsActive);
-                    var earliestAgreement = t.RentAgreements.OrderBy(ra => ra.StartDate).FirstOrDefault();
-                    var tenureStartDate = earliestAgreement?.StartDate;
-                    var tenureYears = tenureStartDate.HasValue 
-                        ? (int)((today - tenureStartDate.Value).TotalDays / 365) 
-                        : 0;
-                    var tenureMonths = tenureStartDate.HasValue 
-                        ? (int)(((today - tenureStartDate.Value).TotalDays % 365) / 30) 
-                        : 0;
+            var defaultResult = tenants.Select(t =>
+            {
+                var activeOcc = t.Occupancies
+                    .FirstOrDefault(o => o.EndDate == null);
 
-                    // Check if rent increase is due (has been living for 1+ years)
-                    var needsRentIncrease = tenureYears >= 1 && activeAgreement != null;
+                var latestLedger = _context.MonthlyLedgers
+                    .Where(l => l.TenantId == t.TenantId)
+                    .OrderByDescending(l => l.Period)
+                    .FirstOrDefault();
 
-                    // Calculate total security deposit and payments
-                    var totalSecurityDeposit = t.RentAgreements.Sum(ra => ra.SecurityDeposit);
-                    var totalPayments = t.Payments?.Sum(p => p.Amount) ?? 0;
+                return new
+                {
+                    Id = t.TenantId,
+                    t.TenantId,
+                    t.Name,
+                    FirstName = t.Name,
+                    LastName = "",
+                    PhoneNumber = (string?)null,
+                    Email = (string?)null,
+                    Address = (string?)null,
+                    IsActive = true,
+                    IsAssigned = activeOcc != null,
+                    RoomNumber = activeOcc?.Flat?.RoomCode,
+                    FlatId = activeOcc?.FlatId,
+                    MonthlyRent = latestLedger?.MonthlyRent ?? 0,
+                    SecurityDeposit = latestLedger?.ElectricSecurity ?? 0,
+                    StartDate = activeOcc?.StartDate?.ToDateTime(TimeOnly.MinValue),
+                    NeedsRentIncrease = false,
+                    ClosingBalance = latestLedger?.ClosingBalance ?? 0
+                };
+            });
 
-                    return new {
-                        t.Id,
-                        t.FirstName,
-                        t.LastName,
-                        t.PhoneNumber,
-                        t.Email,
-                        t.Address,
-                        t.IdProofType,
-                        t.IdProofNumber,
-                        t.IsActive,
-                        t.CreatedDate,
-                        CurrentRoom = activeAgreement?.Room?.RoomNumber,
-                        CurrentRoomId = activeAgreement?.RoomId,
-                        CurrentRent = activeAgreement?.MonthlyRent ?? 0,
-                        SecurityDeposit = totalSecurityDeposit,
-                        TotalPayments = totalPayments,
-                        IsAssigned = activeAgreement != null,
-                        Since = tenureStartDate,
-                        TenureYears = tenureYears,
-                        TenureMonths = tenureMonths,
-                        TenureDisplay = tenureYears > 0 
-                            ? $"{tenureYears} year(s) {tenureMonths} month(s)" 
-                            : tenureMonths > 0 
-                                ? $"{tenureMonths} month(s)" 
-                                : "New",
-                        NeedsRentIncrease = needsRentIncrease,
-                        RentIncreaseMessage = needsRentIncrease 
-                            ? $"Tenant living since {tenureStartDate:MMM yyyy}. Consider rent increase." 
-                            : null,
-                        PaymentHistory = t.Payments?.OrderByDescending(p => p.PaymentDate)
-                            .Take(5)
-                            .Select(p => new {
-                                p.Id,
-                                p.Amount,
-                                p.PaymentDate,
-                                p.PaymentMethod,
-                                p.Notes
-                            }).ToList(),
-                        AllRooms = t.RentAgreements
-                            .OrderByDescending(ra => ra.StartDate)
-                            .Select(ra => new { 
-                                ra.Room?.RoomNumber, 
-                                ra.StartDate, 
-                                ra.EndDate, 
-                                ra.IsActive,
-                                ra.MonthlyRent,
-                                ra.SecurityDeposit
-                            }).ToList()
-                    };
+            return Ok(defaultResult);
+        }
+
+        [HttpGet("unassigned")]
+        public async Task<ActionResult<IEnumerable<object>>> GetUnassignedTenants()
+        {
+            var allTenantIds = await _context.Tenants.Select(t => t.TenantId).ToListAsync();
+            var assignedTenantIds = await _context.Occupancies
+                .Where(o => o.EndDate == null && o.TenantId != null)
+                .Select(o => o.TenantId!.Value)
+                .Distinct()
+                .ToListAsync();
+
+            var unassignedIds = allTenantIds.Except(assignedTenantIds).ToList();
+
+            var unassigned = await _context.Tenants
+                .Where(t => unassignedIds.Contains(t.TenantId))
+                .Select(t => new
+                {
+                    Id = t.TenantId,
+                    t.TenantId,
+                    t.Name,
+                    FirstName = t.Name,
+                    LastName = "",
+                    PhoneNumber = (string?)null
                 })
-                .OrderByDescending(t => t.NeedsRentIncrease)
-                .ThenByDescending(t => !t.IsAssigned) // Unassigned first if requested
-                .ThenBy(t => t.FirstName)
-                .ToList();
+                .ToListAsync();
+
+            return Ok(unassigned);
+        }
+
+        [HttpGet("{id}")]
+        public async Task<ActionResult<object>> GetTenant(Guid id)
+        {
+            var tenant = await _context.Tenants
+                .Include(t => t.Occupancies)
+                    .ThenInclude(o => o.Flat)
+                .FirstOrDefaultAsync(t => t.TenantId == id);
+
+            if (tenant == null) return NotFound();
+
+            var activeOcc = tenant.Occupancies.FirstOrDefault(o => o.EndDate == null);
+
+            // Get ledger history
+            var ledgerHistory = await _context.MonthlyLedgers
+                .Where(l => l.TenantId == id)
+                .Include(l => l.Flat)
+                .OrderByDescending(l => l.Period)
+                .Take(24)
+                .Select(l => new
+                {
+                    Period = l.Period.ToString("yyyy-MM"),
+                    RoomCode = l.Flat!.RoomCode,
+                    l.MonthlyRent,
+                    l.ElecCost,
+                    l.MiscRent,
+                    l.TotalDue,
+                    l.AmountPaid,
+                    l.ClosingBalance
+                })
+                .ToListAsync();
+
+            var latestLedger = ledgerHistory.FirstOrDefault();
+
+            var result = new
+            {
+                Id = tenant.TenantId,
+                tenant.TenantId,
+                tenant.Name,
+                FirstName = tenant.Name,
+                LastName = "",
+                PhoneNumber = (string?)null,
+                Email = (string?)null,
+                Address = (string?)null,
+                IsActive = true,
+                IsAssigned = activeOcc != null,
+                RoomNumber = activeOcc?.Flat?.RoomCode,
+                FlatId = activeOcc?.FlatId,
+                StartDate = activeOcc?.StartDate?.ToDateTime(TimeOnly.MinValue),
+                MonthlyRent = latestLedger?.MonthlyRent ?? 0,
+                ClosingBalance = latestLedger?.ClosingBalance ?? 0,
+                LedgerHistory = ledgerHistory,
+                OccupancyHistory = tenant.Occupancies.OrderByDescending(o => o.StartDate).Select(o => new
+                {
+                    RoomCode = o.Flat?.RoomCode,
+                    o.StartDate,
+                    o.EndDate,
+                    IsActive = o.EndDate == null
+                })
+            };
 
             return Ok(result);
         }
 
-        /// <summary>
-        /// Get unassigned tenants (waiting queue)
-        /// </summary>
-        [HttpGet("unassigned")]
-        public async Task<ActionResult<IEnumerable<object>>> GetUnassignedTenants()
-        {
-            var tenants = await _context.Tenants
-                .Include(t => t.RentAgreements)
-                .Where(t => !t.RentAgreements.Any(ra => ra.IsActive))
-                .Select(t => new {
-                    t.Id,
-                    t.FirstName,
-                    t.LastName,
-                    t.PhoneNumber,
-                    t.Email,
-                    t.CreatedDate
-                })
-                .ToListAsync();
-
-            return Ok(tenants);
-        }
-
-        /// <summary>
-        /// Get single tenant with full details
-        /// </summary>
-        [HttpGet("{id}")]
-        public async Task<ActionResult<object>> GetTenant(int id)
-        {
-            var tenant = await _context.Tenants
-                .Include(t => t.RentAgreements)
-                    .ThenInclude(ra => ra.Room)
-                .Include(t => t.Payments)
-                .FirstOrDefaultAsync(t => t.Id == id);
-
-            if (tenant == null) return NotFound();
-
-            var activeAgreement = tenant.RentAgreements.FirstOrDefault(ra => ra.IsActive);
-            var totalSecurityDeposit = tenant.RentAgreements.Sum(ra => ra.SecurityDeposit);
-
-            // Get pending bills
-            var pendingBills = await _context.Bills
-                .Where(b => b.TenantId == id && b.Status != "Paid" && b.TotalAmount > b.PaidAmount)
-                .Select(b => new {
-                    b.Id,
-                    b.BillNumber,
-                    b.BillPeriod,
-                    b.TotalAmount,
-                    b.PaidAmount,
-                    Outstanding = b.TotalAmount - b.PaidAmount,
-                    b.DueDate
-                })
-                .ToListAsync();
-
-            return Ok(new {
-                tenant.Id,
-                tenant.FirstName,
-                tenant.LastName,
-                tenant.PhoneNumber,
-                tenant.Email,
-                tenant.Address,
-                tenant.IdProofType,
-                tenant.IdProofNumber,
-                tenant.DateOfBirth,
-                tenant.EmergencyContactName,
-                tenant.EmergencyContactPhone,
-                tenant.IsActive,
-                tenant.CreatedDate,
-                CurrentRoom = activeAgreement?.Room?.RoomNumber,
-                CurrentRoomId = activeAgreement?.RoomId,
-                CurrentRent = activeAgreement?.MonthlyRent ?? 0,
-                SecurityDeposit = totalSecurityDeposit,
-                PendingBills = pendingBills,
-                TotalOutstanding = pendingBills.Sum(b => b.Outstanding),
-                PaymentHistory = tenant.Payments?.OrderByDescending(p => p.PaymentDate)
-                    .Select(p => new {
-                        p.Id,
-                        p.Amount,
-                        p.PaymentDate,
-                        p.PaymentMethod,
-                        p.PaymentType,
-                        p.Notes
-                    }).ToList(),
-                RoomHistory = tenant.RentAgreements
-                    .OrderByDescending(ra => ra.StartDate)
-                    .Select(ra => new {
-                        ra.Room?.RoomNumber,
-                        ra.StartDate,
-                        ra.EndDate,
-                        ra.IsActive,
-                        ra.MonthlyRent,
-                        ra.SecurityDeposit
-                    }).ToList()
-            });
-        }
-
-        /// <summary>
-        /// Add tenant with optional room assignment
-        /// </summary>
         [HttpPost]
-        public async Task<ActionResult<object>> PostTenant([FromBody] TenantCreateRequest request)
+        public async Task<ActionResult> PostTenant([FromBody] TenantCreateRequest request)
         {
-            var tenant = new Tenant
-            {
-                FirstName = request.FirstName,
-                LastName = request.LastName,
-                PhoneNumber = request.PhoneNumber,
-                Email = request.Email,
-                Address = request.Address,
-                IdProofType = request.IdProofType,
-                IdProofNumber = request.IdProofNumber,
-                CreatedDate = DateTime.UtcNow,
-                IsActive = true
-            };
+            if (string.IsNullOrWhiteSpace(request.Name) && string.IsNullOrWhiteSpace(request.FirstName))
+                return BadRequest("Name is required.");
 
+            var name = !string.IsNullOrWhiteSpace(request.Name)
+                ? request.Name
+                : $"{request.FirstName} {request.LastName}".Trim();
+
+            // Check for duplicate
+            var exists = await _context.Tenants.AnyAsync(t => t.Name == name);
+            if (exists)
+                return BadRequest($"Tenant '{name}' already exists.");
+
+            var tenant = new Tenant { Name = name };
             _context.Tenants.Add(tenant);
             await _context.SaveChangesAsync();
 
-            // If room is specified, create rent agreement
-            if (request.RoomId.HasValue && request.RoomId > 0)
+            // If a flat was specified, create occupancy
+            if (request.FlatId != null || request.RoomId != null)
             {
-                var room = await _context.Rooms.FindAsync(request.RoomId.Value);
-                if (room != null)
+                Flat? flat = null;
+                if (request.FlatId != null)
+                    flat = await _context.Flats.FindAsync(request.FlatId);
+                else if (request.RoomId != null)
                 {
-                    var property = await _context.Properties.FirstOrDefaultAsync();
-                    var agreement = new RentAgreement
+                    // RoomId might be sent as string GUID from frontend
+                    if (Guid.TryParse(request.RoomId, out var roomGuid))
+                        flat = await _context.Flats.FindAsync(roomGuid);
+                }
+
+                if (flat != null)
+                {
+                    var occupancy = new Occupancy
                     {
-                        PropertyId = property?.Id ?? 1,
-                        RoomId = room.Id,
-                        TenantId = tenant.Id,
-                        StartDate = request.StartDate ?? DateTime.UtcNow,
-                        EndDate = request.EndDate ?? DateTime.UtcNow.AddYears(1),
-                        MonthlyRent = request.MonthlyRent ?? room.MonthlyRent,
-                        SecurityDeposit = request.SecurityDeposit ?? 0,
-                        IsActive = true,
-                        CreatedDate = DateTime.UtcNow
+                        FlatId = flat.FlatId,
+                        TenantId = tenant.TenantId,
+                        StartDate = request.StartDate != null
+                            ? DateOnly.FromDateTime(request.StartDate.Value)
+                            : DateOnly.FromDateTime(DateTime.UtcNow)
                     };
-                    _context.RentAgreements.Add(agreement);
-
-                    // Mark room as occupied
-                    room.IsAvailable = false;
+                    _context.Occupancies.Add(occupancy);
                     await _context.SaveChangesAsync();
-
-                    // Record security deposit payment if provided
-                    if (request.SecurityDeposit.HasValue && request.SecurityDeposit > 0)
-                    {
-                        var payment = new Payment
-                        {
-                            TenantId = tenant.Id,
-                            RentAgreementId = agreement.Id,
-                            Amount = request.SecurityDeposit.Value,
-                            PaymentDate = DateTime.UtcNow,
-                            PaymentMethod = request.PaymentMethod ?? "Cash",
-                            PaymentType = "Security Deposit",
-                            Status = "Completed",
-                            Notes = "Initial security deposit",
-                            CreatedDate = DateTime.UtcNow
-                        };
-                        _context.Payments.Add(payment);
-                        await _context.SaveChangesAsync();
-                    }
                 }
             }
 
-            return CreatedAtAction("GetTenant", new { id = tenant.Id }, new {
-                tenant.Id,
-                tenant.FirstName,
-                tenant.LastName,
-                Message = request.RoomId.HasValue ? "Tenant added and assigned to room" : "Tenant added to queue"
-            });
+            return Ok(new { message = $"Tenant '{name}' added.", tenantId = tenant.TenantId });
         }
 
-        /// <summary>
-        /// Assign tenant to a room
-        /// </summary>
         [HttpPost("{id}/assign")]
-        public async Task<ActionResult> AssignTenantToRoom(int id, [FromBody] RoomAssignmentRequest request)
+        public async Task<ActionResult> AssignTenantToRoom(Guid id, [FromBody] RoomAssignmentRequest request)
         {
-            var tenant = await _context.Tenants
-                .Include(t => t.RentAgreements)
-                .FirstOrDefaultAsync(t => t.Id == id);
+            var tenant = await _context.Tenants.FindAsync(id);
+            if (tenant == null) return NotFound("Tenant not found.");
 
-            if (tenant == null) return NotFound("Tenant not found");
-
-            var room = await _context.Rooms.FindAsync(request.RoomId);
-            if (room == null) return NotFound("Room not found");
-
-            // Deactivate any existing active agreement
-            var existingAgreement = tenant.RentAgreements.FirstOrDefault(ra => ra.IsActive);
-            if (existingAgreement != null)
+            Flat? flat = null;
+            if (request.FlatId != null)
+                flat = await _context.Flats.FindAsync(request.FlatId);
+            else if (request.RoomId != null)
             {
-                existingAgreement.IsActive = false;
-                existingAgreement.EndDate = DateTime.UtcNow;
-                
-                // Mark old room as available
-                var oldRoom = await _context.Rooms.FindAsync(existingAgreement.RoomId);
-                if (oldRoom != null) oldRoom.IsAvailable = true;
+                if (Guid.TryParse(request.RoomId, out var roomGuid))
+                    flat = await _context.Flats.FindAsync(roomGuid);
             }
 
-            var property = await _context.Properties.FirstOrDefaultAsync();
+            if (flat == null) return NotFound("Flat not found.");
 
-            // Create new rent agreement
-            var agreement = new RentAgreement
+            // Check if flat already has active occupancy
+            var existingOcc = await _context.Occupancies
+                .FirstOrDefaultAsync(o => o.FlatId == flat.FlatId && o.EndDate == null && o.TenantId != null);
+            if (existingOcc != null)
+                return BadRequest("This flat is already occupied.");
+
+            var occupancy = new Occupancy
             {
-                PropertyId = property?.Id ?? 1,
-                RoomId = room.Id,
-                TenantId = tenant.Id,
-                StartDate = request.StartDate ?? DateTime.UtcNow,
-                EndDate = request.EndDate ?? DateTime.UtcNow.AddYears(1),
-                MonthlyRent = request.MonthlyRent ?? room.MonthlyRent,
-                SecurityDeposit = request.SecurityDeposit ?? 0,
-                IsActive = true,
-                CreatedDate = DateTime.UtcNow
+                FlatId = flat.FlatId,
+                TenantId = id,
+                StartDate = request.StartDate != null
+                    ? DateOnly.FromDateTime(request.StartDate.Value)
+                    : DateOnly.FromDateTime(DateTime.UtcNow)
             };
-            _context.RentAgreements.Add(agreement);
 
-            // Mark room as occupied
-            room.IsAvailable = false;
+            _context.Occupancies.Add(occupancy);
             await _context.SaveChangesAsync();
 
-            // Record security deposit payment if provided
-            if (request.SecurityDeposit.HasValue && request.SecurityDeposit > 0)
-            {
-                var payment = new Payment
-                {
-                    TenantId = tenant.Id,
-                    RentAgreementId = agreement.Id,
-                    Amount = request.SecurityDeposit.Value,
-                    PaymentDate = DateTime.UtcNow,
-                    PaymentMethod = request.PaymentMethod ?? "Cash",
-                    PaymentType = "Security Deposit",
-                    Status = "Completed",
-                    Notes = "Security deposit for room " + room.RoomNumber,
-                    CreatedDate = DateTime.UtcNow
-                };
-                _context.Payments.Add(payment);
-                await _context.SaveChangesAsync();
-            }
-
-            return Ok(new { 
-                message = $"Tenant assigned to room {room.RoomNumber}",
-                roomNumber = room.RoomNumber,
-                monthlyRent = agreement.MonthlyRent
-            });
+            return Ok(new { message = $"Tenant '{tenant.Name}' assigned to {flat.RoomCode}." });
         }
 
         [HttpPut("{id}")]
-        public async Task<IActionResult> PutTenant(int id, Tenant tenant)
+        public async Task<ActionResult> PutTenant(Guid id, [FromBody] TenantUpdateRequest request)
         {
-            if (id != tenant.Id)
-            {
-                return BadRequest();
-            }
+            var tenant = await _context.Tenants.FindAsync(id);
+            if (tenant == null) return NotFound();
 
-            _context.Entry(tenant).State = EntityState.Modified;
+            if (!string.IsNullOrWhiteSpace(request.Name))
+                tenant.Name = request.Name;
+            else if (!string.IsNullOrWhiteSpace(request.FirstName))
+                tenant.Name = $"{request.FirstName} {request.LastName}".Trim();
 
-            try
-            {
-                await _context.SaveChangesAsync();
-            }
-            catch (DbUpdateConcurrencyException)
-            {
-                if (!TenantExists(id))
-                {
-                    return NotFound();
-                }
-                else
-                {
-                    throw;
-                }
-            }
+            tenant.UpdatedUtc = DateTime.UtcNow;
+            await _context.SaveChangesAsync();
 
-            return NoContent();
-        }
-
-        private bool TenantExists(int id)
-        {
-            return _context.Tenants.Any(e => e.Id == id);
+            return Ok(new { message = "Tenant updated." });
         }
     }
 
     public class TenantCreateRequest
     {
-        public string FirstName { get; set; } = "";
-        public string LastName { get; set; } = "";
+        public string? Name { get; set; }
+        public string? FirstName { get; set; }
+        public string? LastName { get; set; }
         public string? PhoneNumber { get; set; }
         public string? Email { get; set; }
         public string? Address { get; set; }
         public string? IdProofType { get; set; }
         public string? IdProofNumber { get; set; }
-        // Optional room assignment
-        public int? RoomId { get; set; }
+        public Guid? FlatId { get; set; }
+        public string? RoomId { get; set; }
         public DateTime? StartDate { get; set; }
-        public DateTime? EndDate { get; set; }
-        public decimal? MonthlyRent { get; set; }
-        public decimal? SecurityDeposit { get; set; }
-        public string? PaymentMethod { get; set; }
+        public decimal MonthlyRent { get; set; }
+        public decimal SecurityDeposit { get; set; }
     }
 
     public class RoomAssignmentRequest
     {
-        public int RoomId { get; set; }
+        public Guid? FlatId { get; set; }
+        public string? RoomId { get; set; }
         public DateTime? StartDate { get; set; }
-        public DateTime? EndDate { get; set; }
-        public decimal? MonthlyRent { get; set; }
-        public decimal? SecurityDeposit { get; set; }
-        public string? PaymentMethod { get; set; }
+        public decimal MonthlyRent { get; set; }
+        public decimal SecurityDeposit { get; set; }
+    }
+
+    public class TenantUpdateRequest
+    {
+        public string? Name { get; set; }
+        public string? FirstName { get; set; }
+        public string? LastName { get; set; }
+        public string? PhoneNumber { get; set; }
+        public string? Email { get; set; }
+        public string? Address { get; set; }
+        public bool IsActive { get; set; } = true;
     }
 }

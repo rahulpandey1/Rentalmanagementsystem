@@ -143,23 +143,30 @@
                     <span class="me-3 text-muted"><i class="far fa-clock me-1"></i> {{ currentTime | date:'medium'
                         }}</span>
 
-                    <!-- Year Filter Dropdown -->
-                    <div class="me-3">
-                        <select class="form-select form-select-sm" ng-model="selectedYear" ng-change="onYearChange()">
+                    <!-- Month/Year Filter Dropdowns -->
+                    <div class="d-flex gap-2 me-3">
+                        <select class="form-select form-select-sm" ng-model="selectedMonth" ng-change="onPeriodChange()"
+                            style="width: 130px;">
+                            <option ng-repeat="m in months" value="{{m.value}}">{{m.name}}</option>
+                        </select>
+                        <select class="form-select form-select-sm" ng-model="selectedYear" ng-change="onPeriodChange()"
+                            style="width: 90px;">
                             <option ng-repeat="year in availableYears" value="{{year}}">{{year}}</option>
                         </select>
                     </div>
 
                     <div class="dropdown">
                         <a class="nav-link dropdown-toggle" href="#" role="button" data-bs-toggle="dropdown">
-                            <i class="fas fa-user-circle fa-lg"></i> Admin
+                            <i class="fas fa-user-circle fa-lg"></i> {{ userEmail }}
                         </a>
                         <ul class="dropdown-menu dropdown-menu-end">
-                            <li><a class="dropdown-item" href="#">Profile</a></li>
+                            <li><a class="dropdown-item" href="#"><i class="fas fa-envelope me-2"></i>{{ userEmail
+                                    }}</a></li>
                             <li>
                                 <hr class="dropdown-divider">
                             </li>
-                            <li><a class="dropdown-item" href="#">Logout</a></li>
+                            <li><a class="dropdown-item text-danger" href="#" ng-click="logout()"><i
+                                        class="fas fa-sign-out-alt me-2"></i>Logout</a></li>
                         </ul>
                     </div>
                 </div>
@@ -177,14 +184,14 @@
     <script src="https://cdn.jsdelivr.net/npm/chart.js"></script>
 
     <!-- App Scripts -->
-    <script src="app/app.js?v=3"></script>
-    <script src="app/services/apiService.js?v=3"></script>
-    <script src="app/components/dashboard/dashboard.js?v=3"></script>
-    <script src="app/components/rooms/rooms.js?v=3"></script>
-    <script src="app/components/tenants/tenants.js?v=3"></script>
-    <script src="app/components/billing/billing.js?v=3"></script>
-    <script src="app/components/import/import.js?v=3"></script>
-    <script src="app/components/summary/summary.js?v=3"></script>
+    <script src="app/app.js?v=5"></script>
+    <script src="app/services/apiService.js?v=5"></script>
+    <script src="app/components/dashboard/dashboard.js?v=5"></script>
+    <script src="app/components/rooms/rooms.js?v=5"></script>
+    <script src="app/components/tenants/tenants.js?v=5"></script>
+    <script src="app/components/billing/billing.js?v=5"></script>
+    <script src="app/components/import/import.js?v=5"></script>
+    <script src="app/components/summary/summary.js?v=5"></script>
     <script src="app/components/settings/settings.js?v=3"></script>
 
 </body>

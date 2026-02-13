@@ -30,7 +30,7 @@
                 <div class="col-md-3 mb-2" ng-repeat="tenant in unassignedTenants">
                     <div class="card h-100">
                         <div class="card-body p-2">
-                            <strong>{{ tenant.firstName }} {{ tenant.lastName }}</strong>
+                            <strong>{{ tenant.name || (tenant.firstName + ' ' + tenant.lastName) }}</strong>
                             <div class="small text-muted">{{ tenant.phoneNumber || 'No phone' }}</div>
                             <button class="btn btn-sm btn-outline-primary mt-2" ng-click="assignTenantToRoom(tenant)">
                                 <i class="fas fa-door-open"></i> Assign Room
@@ -50,7 +50,7 @@
                     <th>Room</th>
                     <th>Rent</th>
                     <th>Since</th>
-                    <th>Security</th>
+                    <th>Balance</th>
                     <th>Status</th>
                     <th>Actions</th>
                 </tr>
@@ -62,34 +62,33 @@
                             <div class="avatar text-white rounded-circle me-2 d-flex justify-content-center align-items-center"
                                 ng-class="{'bg-warning': tenant.needsRentIncrease, 'bg-primary': !tenant.needsRentIncrease && tenant.isAssigned, 'bg-secondary': !tenant.isAssigned}"
                                 style="width: 40px; height: 40px;">
-                                {{ tenant.firstName[0] }}{{ tenant.lastName[0] }}
+                                {{ (tenant.name || tenant.firstName || '?')[0] }}
                             </div>
                             <div>
                                 <div class="fw-bold">
-                                    {{ tenant.firstName }} {{ tenant.lastName }}
+                                    {{ tenant.name || (tenant.firstName + ' ' + tenant.lastName) }}
                                     <i class="fas fa-arrow-up text-warning" ng-if="tenant.needsRentIncrease"
                                         title="Rent increase suggested"></i>
                                 </div>
-                                <small class="text-muted">{{ tenant.phoneNumber || 'No phone' }}</small>
+                                <small class="text-muted">{{ tenant.phoneNumber || '' }}</small>
                             </div>
                         </div>
                     </td>
                     <td>
-                        <span ng-if="tenant.currentRoom" class="badge bg-primary">{{ tenant.currentRoom }}</span>
-                        <span ng-if="!tenant.currentRoom" class="badge bg-secondary">Unassigned</span>
+                        <span ng-if="tenant.roomNumber" class="badge bg-primary">{{ tenant.roomNumber }}</span>
+                        <span ng-if="!tenant.roomNumber" class="badge bg-secondary">Unassigned</span>
                     </td>
                     <td>
-                        <span ng-if="tenant.currentRent">₹{{ tenant.currentRent | number }}</span>
-                        <span ng-if="!tenant.currentRent" class="text-muted">-</span>
+                        <span ng-if="tenant.monthlyRent">₹{{ tenant.monthlyRent | number }}</span>
+                        <span ng-if="!tenant.monthlyRent" class="text-muted">-</span>
                     </td>
                     <td>
-                        <span ng-if="tenant.since">{{ tenant.since | date:'MMM yyyy' }}</span>
-                        <small ng-if="tenant.tenureDisplay" class="d-block text-muted">{{ tenant.tenureDisplay
-                            }}</small>
+                        <span ng-if="tenant.startDate">{{ tenant.startDate | date:'MMM yyyy' }}</span>
                     </td>
                     <td>
-                        <span ng-if="tenant.securityDeposit">₹{{ tenant.securityDeposit | number }}</span>
-                        <span ng-if="!tenant.securityDeposit" class="text-muted">-</span>
+                        <span ng-if="tenant.closingBalance > 0" class="text-danger">₹{{ tenant.closingBalance | number
+                            }}</span>
+                        <span ng-if="tenant.closingBalance <= 0" class="text-success">Clear</span>
                     </td>
                     <td>
                         <span class="badge"
@@ -123,73 +122,43 @@
         <div class="modal-dialog modal-lg">
             <div class="modal-content">
                 <div class="modal-header bg-primary text-white">
-                    <h5 class="modal-title">{{ newTenant.id ? 'Edit' : 'Add New' }} Tenant</h5>
+                    <h5 class="modal-title">{{ newTenant.tenantId ? 'Edit' : 'Add New' }} Tenant</h5>
                     <button type="button" class="btn-close btn-close-white" data-bs-dismiss="modal"></button>
                 </div>
                 <div class="modal-body">
                     <form ng-submit="saveTenant()">
                         <div class="row g-3">
-                            <div class="col-md-6">
-                                <label class="form-label">First Name *</label>
-                                <input type="text" class="form-control" ng-model="newTenant.firstName" required>
-                            </div>
-                            <div class="col-md-6">
-                                <label class="form-label">Last Name *</label>
-                                <input type="text" class="form-control" ng-model="newTenant.lastName" required>
-                            </div>
-                            <div class="col-md-6">
-                                <label class="form-label">Phone Number</label>
-                                <input type="text" class="form-control" ng-model="newTenant.phoneNumber">
-                            </div>
-                            <div class="col-md-6">
-                                <label class="form-label">Email</label>
-                                <input type="email" class="form-control" ng-model="newTenant.email">
-                            </div>
                             <div class="col-12">
-                                <label class="form-label">Address</label>
-                                <textarea class="form-control" ng-model="newTenant.address" rows="2"></textarea>
-                            </div>
-                            <div class="col-md-6">
-                                <label class="form-label">ID Proof Type</label>
-                                <select class="form-select" ng-model="newTenant.idProofType">
-                                    <option value="">Select...</option>
-                                    <option value="Aadhaar">Aadhaar Card</option>
-                                    <option value="PAN">PAN Card</option>
-                                    <option value="Voter">Voter ID</option>
-                                    <option value="Passport">Passport</option>
-                                    <option value="DL">Driving License</option>
-                                </select>
-                            </div>
-                            <div class="col-md-6">
-                                <label class="form-label">ID Proof Number</label>
-                                <input type="text" class="form-control" ng-model="newTenant.idProofNumber">
+                                <label class="form-label">Name *</label>
+                                <input type="text" class="form-control" ng-model="newTenant.name"
+                                    placeholder="Tenant full name" required>
                             </div>
 
                             <!-- Room Assignment Section -->
-                            <div class="col-12" ng-if="!newTenant.id">
+                            <div class="col-12" ng-if="!newTenant.tenantId">
                                 <hr>
                                 <h6><i class="fas fa-door-open text-primary"></i> Room Assignment (Optional)</h6>
                                 <small class="text-muted">Leave empty to add tenant to waiting queue</small>
                             </div>
-                            <div class="col-md-6" ng-if="!newTenant.id">
+                            <div class="col-md-6" ng-if="!newTenant.tenantId">
                                 <label class="form-label">Assign to Room</label>
                                 <select class="form-select" ng-model="newTenant.roomId"
                                     ng-change="onRoomSelectForTenant()">
                                     <option value="">-- Add to Queue (No Room) --</option>
-                                    <option ng-repeat="room in availableRooms" value="{{room.id}}">
-                                        {{room.roomNumber}} (₹{{ room.monthlyRent }}/month)
+                                    <option ng-repeat="room in availableRooms" value="{{room.flatId}}">
+                                        {{room.roomNumber || room.roomCode}} (₹{{ room.monthlyRent }}/month)
                                     </option>
                                 </select>
                             </div>
-                            <div class="col-md-6" ng-if="!newTenant.id && newTenant.roomId">
+                            <div class="col-md-6" ng-if="!newTenant.tenantId && newTenant.roomId">
                                 <label class="form-label">Monthly Rent (₹)</label>
                                 <input type="number" class="form-control" ng-model="newTenant.monthlyRent">
                             </div>
-                            <div class="col-md-6" ng-if="!newTenant.id && newTenant.roomId">
+                            <div class="col-md-6" ng-if="!newTenant.tenantId && newTenant.roomId">
                                 <label class="form-label">Security Deposit (₹)</label>
                                 <input type="number" class="form-control" ng-model="newTenant.securityDeposit">
                             </div>
-                            <div class="col-md-6" ng-if="!newTenant.id && newTenant.roomId">
+                            <div class="col-md-6" ng-if="!newTenant.tenantId && newTenant.roomId">
                                 <label class="form-label">Start Date</label>
                                 <input type="date" class="form-control" ng-model="newTenant.startDate">
                             </div>
@@ -216,7 +185,8 @@
                 </div>
                 <div class="modal-body">
                     <div class="mb-3">
-                        <strong>Tenant:</strong> {{ assigningTenant.firstName }} {{ assigningTenant.lastName }}
+                        <strong>Tenant:</strong> {{ assigningTenant.name || (assigningTenant.firstName + ' ' +
+                        assigningTenant.lastName) }}
                     </div>
                     <form ng-submit="confirmAssignRoom()">
                         <div class="mb-3">
@@ -224,8 +194,8 @@
                             <select class="form-select" ng-model="roomAssignment.roomId"
                                 ng-change="onRoomSelectForAssign()" required>
                                 <option value="">-- Select Room --</option>
-                                <option ng-repeat="room in availableRooms" value="{{room.id}}">
-                                    {{room.roomNumber}} (₹{{ room.monthlyRent }}/month)
+                                <option ng-repeat="room in availableRooms" value="{{room.flatId}}">
+                                    {{room.roomNumber || room.roomCode}} (₹{{ room.monthlyRent }}/month)
                                 </option>
                             </select>
                         </div>
@@ -258,53 +228,59 @@
         <div class="modal-dialog modal-lg">
             <div class="modal-content">
                 <div class="modal-header">
-                    <h5 class="modal-title">Tenant Details: {{ selectedTenant.firstName }} {{ selectedTenant.lastName }}
+                    <h5 class="modal-title">Tenant Details: {{ selectedTenant.name }}
                     </h5>
                     <button type="button" class="btn-close" data-bs-dismiss="modal"></button>
                 </div>
                 <div class="modal-body">
                     <div class="row">
                         <div class="col-md-6">
-                            <h6>Contact Info</h6>
-                            <p><strong>Phone:</strong> {{ selectedTenant.phoneNumber || 'N/A' }}</p>
-                            <p><strong>Email:</strong> {{ selectedTenant.email || 'N/A' }}</p>
-                            <p><strong>Address:</strong> {{ selectedTenant.address || 'N/A' }}</p>
+                            <h6>Info</h6>
+                            <p><strong>Name:</strong> {{ selectedTenant.name }}</p>
                         </div>
                         <div class="col-md-6">
                             <h6>Current Status</h6>
-                            <p><strong>Room:</strong> {{ selectedTenant.currentRoom || 'Not Assigned' }}</p>
-                            <p><strong>Rent:</strong> ₹{{ selectedTenant.currentRent | number }}</p>
-                            <p><strong>Security Deposit:</strong> ₹{{ selectedTenant.securityDeposit | number }}</p>
-                            <p><strong>Since:</strong> {{ selectedTenant.since | date:'dd MMM yyyy' }}</p>
+                            <p><strong>Room:</strong> {{ selectedTenant.roomNumber || 'Not Assigned' }}</p>
+                            <p><strong>Rent:</strong> ₹{{ selectedTenant.monthlyRent | number }}</p>
+                            <p><strong>Balance:</strong> ₹{{ selectedTenant.closingBalance | number }}</p>
+                            <p><strong>Since:</strong> {{ selectedTenant.startDate | date:'dd MMM yyyy' }}</p>
                         </div>
                     </div>
                     <hr>
-                    <h6>Payment History</h6>
+                    <h6>Ledger History</h6>
                     <table class="table table-sm"
-                        ng-if="selectedTenant.paymentHistory && selectedTenant.paymentHistory.length > 0">
+                        ng-if="selectedTenant.ledgerHistory && selectedTenant.ledgerHistory.length > 0">
                         <thead>
                             <tr>
-                                <th>Date</th>
-                                <th>Amount</th>
-                                <th>Method</th>
-                                <th>Notes</th>
+                                <th>Period</th>
+                                <th>Room</th>
+                                <th>Rent</th>
+                                <th>Electric</th>
+                                <th>Total Due</th>
+                                <th>Paid</th>
+                                <th>Balance</th>
                             </tr>
                         </thead>
                         <tbody>
-                            <tr ng-repeat="payment in selectedTenant.paymentHistory">
-                                <td>{{ payment.paymentDate | date:'dd MMM yyyy' }}</td>
-                                <td>₹{{ payment.amount | number }}</td>
-                                <td>{{ payment.paymentMethod }}</td>
-                                <td>{{ payment.notes }}</td>
+                            <tr ng-repeat="entry in selectedTenant.ledgerHistory">
+                                <td>{{ entry.period }}</td>
+                                <td>{{ entry.roomCode }}</td>
+                                <td>₹{{ entry.monthlyRent | number }}</td>
+                                <td>₹{{ entry.elecCost | number }}</td>
+                                <td>₹{{ entry.totalDue | number }}</td>
+                                <td class="text-success">₹{{ entry.amountPaid | number }}</td>
+                                <td ng-class="{'text-danger': entry.closingBalance > 0}">₹{{ entry.closingBalance |
+                                    number }}</td>
                             </tr>
                         </tbody>
                     </table>
-                    <p ng-if="!selectedTenant.paymentHistory || selectedTenant.paymentHistory.length === 0"
+                    <p ng-if="!selectedTenant.ledgerHistory || selectedTenant.ledgerHistory.length === 0"
                         class="text-muted">
-                        No payment history available.
+                        No ledger history available.
                     </p>
                 </div>
             </div>
         </div>
     </div>
+
 </div>

@@ -1,4 +1,4 @@
-app.controller('RoomsController', function ($scope, $http, apiService, $timeout) {
+app.controller('RoomsController', function ($scope, $http, apiService, $timeout, $rootScope) {
     $scope.loading = true;
     $scope.rooms = [];
     $scope.unassignedTenants = [];
@@ -9,11 +9,20 @@ app.controller('RoomsController', function ($scope, $http, apiService, $timeout)
     $scope.roomDetails = {};
     $scope.assignment = {};
     $scope.meterData = {};
+    $scope.newRoom = {};
+    $scope.periodLabel = '';
 
-    function loadData() {
+    var monthNames = ['January', 'February', 'March', 'April', 'May', 'June',
+        'July', 'August', 'September', 'October', 'November', 'December'];
+
+    function loadData(month, year) {
         $scope.loading = true;
+        month = month || parseInt($rootScope.selectedMonth) || new Date().getMonth() + 1;
+        year = year || parseInt($rootScope.selectedYear) || new Date().getFullYear();
 
-        var p1 = apiService.getRooms().then(function (response) {
+        $scope.periodLabel = monthNames[month - 1] + ' ' + year;
+
+        var p1 = apiService.getRooms(month, year).then(function (response) {
             $scope.rooms = response.data;
             $scope.availableCount = response.data.filter(function (r) { return r.isAvailable; }).length;
             $scope.occupiedCount = response.data.filter(function (r) { return !r.isAvailable; }).length;
@@ -30,13 +39,19 @@ app.controller('RoomsController', function ($scope, $http, apiService, $timeout)
         });
     }
 
+    // Listen for global period change
+    var deregister = $rootScope.$on('periodChanged', function (event, data) {
+        loadData(data.month, data.year);
+    });
+    $scope.$on('$destroy', deregister);
+
     $scope.filterRooms = function (room) {
         if ($scope.filterFloor === '') return true;
         return room.floorNumber == $scope.filterFloor;
     };
 
     $scope.toggleAvailability = function (room) {
-        apiService.updateRoomAvailability(room.id, room.isAvailable);
+        apiService.updateRoomAvailability(room.flatId, room.isAvailable);
     };
 
     $scope.openAssignTenant = function (room) {
@@ -59,65 +74,23 @@ app.controller('RoomsController', function ($scope, $http, apiService, $timeout)
         }
 
         var data = {
-            tenantId: parseInt($scope.assignment.tenantId),
+            tenantId: $scope.assignment.tenantId,
             monthlyRent: $scope.assignment.monthlyRent,
             securityDeposit: $scope.assignment.securityDeposit,
             startDate: $scope.assignment.startDate
         };
 
-        $http.post('/api/Rooms/' + $scope.selectedRoom.id + '/assign-tenant', data).then(function (response) {
+        $http.post('/api/Flats/' + $scope.selectedRoom.flatId + '/assign-tenant', data).then(function (response) {
             loadData();
             closeModal('assignTenantModal');
             alert(response.data.message);
         }, function (err) {
-            alert('Error assigning tenant');
-        });
-    };
-
-    $scope.openMeterReading = function (room) {
-        $scope.selectedRoom = room;
-        $scope.meterData = {
-            meterNumber: room.electricMeterNumber || '',
-            previousReading: room.lastMeterReading || 0,
-            currentReading: null,
-            unitsConsumed: 0
-        };
-        var modal = new bootstrap.Modal(document.getElementById('meterReadingModal'));
-        modal.show();
-    };
-
-    $scope.calculateUnits = function () {
-        var prev = $scope.meterData.previousReading || 0;
-        var curr = $scope.meterData.currentReading || 0;
-        $scope.meterData.unitsConsumed = curr > prev ? curr - prev : 0;
-    };
-
-    $scope.saveMeterReading = function () {
-        // First update meter number if changed
-        if ($scope.meterData.meterNumber) {
-            $http.put('/api/Rooms/' + $scope.selectedRoom.id + '/meter', {
-                meterNumber: $scope.meterData.meterNumber,
-                currentReading: $scope.meterData.currentReading
-            });
-        }
-
-        // Record meter reading
-        var data = {
-            previousReading: $scope.meterData.previousReading,
-            currentReading: $scope.meterData.currentReading
-        };
-
-        $http.post('/api/Rooms/' + $scope.selectedRoom.id + '/meter-reading', data).then(function (response) {
-            loadData();
-            closeModal('meterReadingModal');
-            alert('Meter reading saved! Units: ' + response.data.unitsConsumed + ', Charges: ₹' + response.data.charges);
-        }, function (err) {
-            alert('Error saving meter reading');
+            alert('Error assigning tenant: ' + (err.data?.message || err.data || err.statusText));
         });
     };
 
     $scope.viewRoomDetails = function (room) {
-        $http.get('/api/Rooms/' + room.id).then(function (response) {
+        $http.get('/api/Flats/' + room.flatId).then(function (response) {
             $scope.roomDetails = response.data;
             var modal = new bootstrap.Modal(document.getElementById('roomDetailsModal'));
             modal.show();
@@ -131,11 +104,11 @@ app.controller('RoomsController', function ($scope, $http, apiService, $timeout)
     }
 
     $scope.vacateRoom = function (room) {
-        if (!confirm('Are you sure you want to vacate room ' + room.roomNumber + '? This will end the current agreement.')) {
+        if (!confirm('Are you sure you want to vacate room ' + (room.roomNumber || room.roomCode) + '? This will end the current agreement.')) {
             return;
         }
 
-        $http.post('/api/Rooms/' + room.id + '/vacate', {}).then(function (response) {
+        $http.post('/api/Flats/' + room.flatId + '/vacate', {}).then(function (response) {
             loadData();
             alert(response.data.message);
         }, function (err) {
@@ -160,13 +133,35 @@ app.controller('RoomsController', function ($scope, $http, apiService, $timeout)
             startDate: $scope.renewData.startDate
         };
 
-        $http.post('/api/Rooms/' + $scope.selectedRoom.id + '/renew-agreement', data).then(function (response) {
+        $http.post('/api/Flats/' + $scope.selectedRoom.flatId + '/renew-agreement', data).then(function (response) {
             loadData();
             closeModal('renewModal');
             alert(response.data.message);
         }, function (err) {
             alert('Error renewing agreement: ' + (err.data || err.statusText));
         });
+    };
+
+    // Add new room
+    $scope.openAddRoom = function () {
+        $scope.newRoom = { roomCode: '', floor: 0 };
+        var modal = new bootstrap.Modal(document.getElementById('addRoomModal'));
+        modal.show();
+    };
+
+    $scope.saveNewRoom = function () {
+        if (!$scope.newRoom.roomCode) {
+            alert('Room code is required');
+            return;
+        }
+        apiService.addRoom({ roomCode: $scope.newRoom.roomCode, floor: $scope.newRoom.floor })
+            .then(function (response) {
+                loadData();
+                closeModal('addRoomModal');
+                alert(response.data.message);
+            }, function (err) {
+                alert('Error adding room: ' + (err.data?.message || err.data || 'Unknown error'));
+            });
     };
 
     loadData();

@@ -1,15 +1,6 @@
 app.controller('SummaryController', function ($scope, $rootScope, $http, apiService, $timeout) {
     $scope.loading = true;
     $scope.summaryData = [];
-    $scope.selectedYear = $rootScope.selectedYear || new Date().getFullYear();
-    $scope.selectedMonth = (new Date().getMonth() + 1).toString(); // Current month
-
-    // Years for dropdown
-    $scope.years = [];
-    var currentYear = new Date().getFullYear();
-    for (var i = currentYear; i >= 2000; i--) {
-        $scope.years.push(i);
-    }
 
     $scope.getMonthName = function (monthNum) {
         var date = new Date();
@@ -17,9 +8,12 @@ app.controller('SummaryController', function ($scope, $rootScope, $http, apiServ
         return date.toLocaleString('en-US', { month: 'long' });
     };
 
-    $scope.loadSummary = function () {
+    function loadSummary(month, year) {
         $scope.loading = true;
-        apiService.getMonthlySummary($scope.selectedMonth, $scope.selectedYear)
+        month = month || parseInt($rootScope.selectedMonth) || new Date().getMonth() + 1;
+        year = year || parseInt($rootScope.selectedYear) || new Date().getFullYear();
+
+        apiService.getMonthlySummary(month, year)
             .then(function (response) {
                 $scope.summaryData = response.data;
                 $scope.loading = false;
@@ -27,6 +21,10 @@ app.controller('SummaryController', function ($scope, $rootScope, $http, apiServ
                 console.error("Error loading summary:", error);
                 $scope.loading = false;
             });
+    }
+
+    $scope.loadSummary = function () {
+        loadSummary();
     };
 
     $scope.getTotal = function (field) {
@@ -53,7 +51,10 @@ app.controller('SummaryController', function ($scope, $rootScope, $http, apiServ
     };
 
     $scope.exportToExcel = function () {
-        // Simple CSV export for now
+        var month = parseInt($rootScope.selectedMonth) || new Date().getMonth() + 1;
+        var year = parseInt($rootScope.selectedYear) || new Date().getFullYear();
+
+        // Simple CSV export
         var csv = [];
         var header = [
             "SNO", "NAME", "ROOM NO", "ALLOTMENT DATE", "ELECTRIC SECURITY", "RENT",
@@ -105,12 +106,18 @@ app.controller('SummaryController', function ($scope, $rootScope, $http, apiServ
         var encodedUri = encodeURI(csvContent);
         var link = document.createElement("a");
         link.setAttribute("href", encodedUri);
-        link.setAttribute("download", "Monthly_Summary_" + $scope.getMonthName($scope.selectedMonth) + "_" + $scope.selectedYear + ".csv");
+        link.setAttribute("download", "Monthly_Summary_" + $scope.getMonthName(month) + "_" + year + ".csv");
         document.body.appendChild(link);
         link.click();
         document.body.removeChild(link);
     };
 
+    // Listen for period change
+    var deregister = $rootScope.$on('periodChanged', function (event, data) {
+        loadSummary(data.month, data.year);
+    });
+    $scope.$on('$destroy', deregister);
+
     // Initial load
-    $scope.loadSummary();
+    loadSummary();
 });

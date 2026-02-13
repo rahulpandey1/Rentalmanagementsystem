@@ -1,11 +1,12 @@
+using Microsoft.AspNetCore.Authorization;
 using Microsoft.AspNetCore.Mvc;
 using Microsoft.EntityFrameworkCore;
 using RentalBackend.Data;
 using RentalBackend.Models;
-using System.Globalization;
 
 namespace RentalBackend.Controllers
 {
+    [Authorize]
     [ApiController]
     [Route("api/[controller]")]
     public class ReportsController : ControllerBase
@@ -25,65 +26,62 @@ namespace RentalBackend.Controllers
                 return BadRequest("Invalid month or year.");
             }
 
-            // Fetch records from the dedicated monthly table (populated via Import)
-            var records = await _context.RoomMonthlyRecords
-                .Include(r => r.Room)
-                .Where(r => r.Month == month && r.Year == year)
-                .OrderBy(r => r.RoomId)
+            var period = new DateOnly(year, month, 1);
+
+            var records = await _context.MonthlyLedgers
+                .Include(l => l.Flat)
+                .Include(l => l.Tenant)
+                .Where(l => l.Period == period)
+                .OrderBy(l => l.SerialNumber)
+                .ThenBy(l => l.Flat!.RoomCode)
                 .ToListAsync();
 
-            // If no records found for this month, we might want to return empty or 
-            // maybe generate a skeleton if it's the current month and not yet imported?
-            // For now, let's return what we have. If empty, the frontend shows empty.
-            // But to be helpful, if empty, we could fallback to 'All Rooms' with empty values.
-            
             if (!records.Any())
             {
-                 // Fallback: Get all rooms and show as empty/vacant or current state
-                 // This ensures the table isn't just blank if no import happened yet for this month.
-                 var rooms = await _context.Rooms.OrderBy(r => r.Id).ToListAsync();
-                 return Ok(rooms.Select(room => new
-                 {
-                     RoomNo = room.RoomNumber,
-                     Name = "VACANT", // Default to vacant if no record
-                     IsVacant = true,
-                     CurrentRent = room.MonthlyRent,
-                     Remarks = "No data imported"
-                 }));
+                // Fallback: show all flats with empty values
+                var flats = await _context.Flats.OrderBy(f => f.RoomCode).ToListAsync();
+                return Ok(flats.Select(flat => new
+                {
+                    RoomNo = flat.RoomCode,
+                    Name = "VACANT",
+                    IsVacant = true,
+                    CurrentRent = 0m,
+                    Remarks = "No data for this period"
+                }));
             }
 
             var summary = records.Select(r => new
             {
-                RoomNo = r.Room.RoomNumber,
-                Name = r.TenantName,
-                IsVacant = r.IsVacant,
-                
+                RoomNo = r.Flat?.RoomCode,
+                Name = r.Tenant?.Name ?? "VACANT",
+                IsVacant = r.TenantId == null || (r.Tenant?.Name?.Contains("VACANT", StringComparison.OrdinalIgnoreCase) ?? false) || (r.Tenant?.Name?.Contains("VACAMT", StringComparison.OrdinalIgnoreCase) ?? false),
+
                 // Allotment
-                DateOfAllotment = r.InitialAllotmentDate,
-                CurrentAllotment = r.CurrentAllotmentDate,
-                
+                DateOfAllotment = r.DateOfAllotment?.ToDateTime(TimeOnly.MinValue),
+                CurrentAllotment = r.DateOfAllotment?.ToDateTime(TimeOnly.MinValue),
+
                 // Rent
-                InitialRent = r.InitialRent,
-                CurrentRent = r.CurrentRent,
-                
+                InitialRent = r.MonthlyRent,
+                CurrentRent = r.MonthlyRent,
+
                 // Security
-                InitialSecurity = r.ElectricSecurity, // Mapped to 'ELECTRIC SECURITY' column
-                CurrentAdvance = r.CurrentAdvance,
-                
+                InitialSecurity = r.ElectricSecurity,
+                CurrentAdvance = 0m,
+
                 // Electric
-                MeterNew = r.CurrentReading,
-                MeterPrev = r.PreviousReading,
-                MeterUnits = r.UnitsConsumed,
-                ElectricCost = r.ElectricBillAmount,
-                
+                MeterNew = r.ElecNew,
+                MeterPrev = r.ElecPrev,
+                MeterUnits = r.ElecUnits,
+                ElectricCost = r.ElecCost,
+
                 // Financials
-                MiscRent = r.MiscCharges,
-                BalanceForward = r.BalanceBroughtForward,
-                TotalAmountDue = r.TotalAmountDue,
+                MiscRent = r.MiscRent,
+                BalanceForward = r.Carryover,
+                TotalAmountDue = r.TotalDue,
                 AmountPaid = r.AmountPaid,
-                CarryForward = r.BalanceCarriedForward,
-                
-                PaymentDate = r.PaymentDate,
+                CarryForward = r.ClosingBalance,
+
+                PaymentDate = r.PaymentDate?.ToDateTime(TimeOnly.MinValue),
                 Remarks = r.Remarks
             });
 

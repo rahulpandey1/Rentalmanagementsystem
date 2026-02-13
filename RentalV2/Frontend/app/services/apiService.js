@@ -1,47 +1,66 @@
 app.service('apiService', function ($http, $rootScope) {
     var baseUrl = '/api';
 
-    var getYearParam = function () {
-        return $rootScope.selectedYear ? '?year=' + $rootScope.selectedYear : '';
+    var getPeriodParams = function () {
+        var params = [];
+        if ($rootScope.selectedMonth) params.push('month=' + $rootScope.selectedMonth);
+        if ($rootScope.selectedYear) params.push('year=' + $rootScope.selectedYear);
+        return params.length > 0 ? '?' + params.join('&') : '';
     };
 
     // Dashboard
-    this.getDashboardStats = function (year) {
-        var param = year ? '?year=' + year : getYearParam();
-        return $http.get(baseUrl + '/Dashboard/stats' + param);
+    this.getDashboardStats = function (month, year) {
+        var params = [];
+        if (month) params.push('month=' + month);
+        if (year) params.push('year=' + year);
+        var qs = params.length > 0 ? '?' + params.join('&') : getPeriodParams();
+        return $http.get(baseUrl + '/Dashboard/stats' + qs);
     };
 
-    this.getFloorView = function (year) {
-        var param = year ? '?year=' + year : getYearParam();
-        return $http.get(baseUrl + '/Dashboard/floor-view' + param);
+    this.getAvailablePeriods = function () {
+        return $http.get(baseUrl + '/Dashboard/available-periods');
     };
 
-    this.getBillingSummary = function (year) {
-        var param = year ? '?year=' + year : getYearParam();
-        return $http.get(baseUrl + '/Dashboard/billing-summary' + param);
+    this.getBillingSummary = function (month, year) {
+        var params = [];
+        if (month) params.push('month=' + month);
+        if (year) params.push('year=' + year);
+        var qs = params.length > 0 ? '?' + params.join('&') : getPeriodParams();
+        return $http.get(baseUrl + '/Dashboard/billing-summary' + qs);
     };
 
     this.getMonthlySummary = function (month, year) {
         return $http.get(baseUrl + '/Reports/monthly-summary?month=' + month + '&year=' + year);
     };
 
-    // Rooms
-    this.getRooms = function () {
-        return $http.get(baseUrl + '/Rooms');
+    // Flats (Rooms) — period-aware
+    this.getRooms = function (month, year) {
+        var params = [];
+        if (month) params.push('month=' + month);
+        if (year) params.push('year=' + year);
+        var qs = params.length > 0 ? '?' + params.join('&') : getPeriodParams();
+        return $http.get(baseUrl + '/Flats' + qs);
+    };
+
+    this.addRoom = function (data) {
+        return $http.post(baseUrl + '/Flats', data);
     };
 
     this.updateRoomAvailability = function (id, isAvailable) {
-        return $http.put(baseUrl + '/Rooms/' + id + '/availability', isAvailable);
+        return $http.put(baseUrl + '/Flats/' + id + '/availability', isAvailable);
     };
 
     this.updateRoomRent = function (id, newRent) {
-        return $http.put(baseUrl + '/Rooms/' + id + '/rent', newRent);
+        return $http.put(baseUrl + '/Flats/' + id + '/rent', newRent);
     };
 
-    // Tenants
-    this.getTenants = function (year) {
-        var param = year ? '?year=' + year : '';
-        return $http.get(baseUrl + '/Tenants' + param);
+    // Tenants — period-aware
+    this.getTenants = function (month, year) {
+        var params = [];
+        if (month) params.push('month=' + month);
+        if (year) params.push('year=' + year);
+        var qs = params.length > 0 ? '?' + params.join('&') : getPeriodParams();
+        return $http.get(baseUrl + '/Tenants' + qs);
     };
 
     this.addTenant = function (tenant) {
@@ -52,30 +71,20 @@ app.service('apiService', function ($http, $rootScope) {
         return $http.put(baseUrl + '/Tenants/' + id, tenant);
     };
 
-    // Bills
-    this.getBills = function () {
-        return $http.get(baseUrl + '/Bills');
+    // Bills — period-aware
+    this.getBills = function (month, year) {
+        var params = [];
+        if (month) params.push('month=' + month);
+        if (year) params.push('year=' + year);
+        var qs = params.length > 0 ? '?' + params.join('&') : getPeriodParams();
+        return $http.get(baseUrl + '/Bills' + qs);
     };
 
-    this.getOutstandingBills = function () {
-        return $http.get(baseUrl + '/Bills/outstanding');
-    };
-
-    this.generateBill = function (billData) {
-        return $http.post(baseUrl + '/Bills/generate', billData);
-    };
-
-    this.generateBulkBills = function (data) {
-        return $http.post(baseUrl + '/Bills/generate-bulk', data);
-    };
-
-    // Import
-    this.importExcel = function (data) {
-        var fd = new FormData();
-        fd.append('file', data);
-        return $http.post(baseUrl + '/DataImport/upload', fd, {
-            transformRequest: angular.identity,
-            headers: { 'Content-Type': undefined }
-        });
+    this.getOutstandingBills = function (month, year) {
+        var params = [];
+        if (month) params.push('month=' + month);
+        if (year) params.push('year=' + year);
+        var qs = params.length > 0 ? '?' + params.join('&') : getPeriodParams();
+        return $http.get(baseUrl + '/Bills/outstanding' + qs);
     };
 });

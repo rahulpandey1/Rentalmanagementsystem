@@ -1,11 +1,13 @@
 app.controller('DashboardController', function ($scope, $rootScope, apiService) {
     $scope.loading = true;
     $scope.stats = {};
-    $scope.floorData = {};
 
-    function loadStats() {
+    function loadStats(month, year) {
         $scope.loading = true;
-        apiService.getDashboardStats().then(function (response) {
+        month = month || parseInt($rootScope.selectedMonth) || new Date().getMonth() + 1;
+        year = year || parseInt($rootScope.selectedYear) || new Date().getFullYear();
+
+        apiService.getDashboardStats(month, year).then(function (response) {
             $scope.stats = response.data;
             $scope.loading = false;
         }, function (error) {
@@ -18,10 +20,11 @@ app.controller('DashboardController', function ($scope, $rootScope, apiService) 
         loadStats();
     };
 
-    // Listen for year change events
-    $scope.$on('yearChanged', function (event, year) {
-        loadStats();
+    // Listen for period change events
+    var deregister = $rootScope.$on('periodChanged', function (event, data) {
+        loadStats(data.month, data.year);
     });
+    $scope.$on('$destroy', deregister);
 
     // Initial load
     loadStats();

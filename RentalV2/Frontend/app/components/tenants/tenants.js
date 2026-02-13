@@ -8,26 +8,19 @@ app.controller('TenantsController', function ($scope, $rootScope, $http, apiServ
     $scope.assigningTenant = {};
     $scope.roomAssignment = {};
     $scope.rentIncreaseCount = 0;
-    $scope.selectedYear = $rootScope.selectedYear || new Date().getFullYear();
 
-    // Watch for year changes
-    $rootScope.$watch('selectedYear', function (newYear) {
-        if (newYear && newYear !== $scope.selectedYear) {
-            $scope.selectedYear = newYear;
-            loadTenants();
-        }
-    });
-
-    function loadTenants() {
+    function loadTenants(month, year) {
         $scope.loading = true;
+        month = month || parseInt($rootScope.selectedMonth) || new Date().getMonth() + 1;
+        year = year || parseInt($rootScope.selectedYear) || new Date().getFullYear();
 
-        var p1 = $http.get('/api/Tenants?year=' + $scope.selectedYear + '&includeUnassigned=true').then(function (response) {
+        var p1 = apiService.getTenants(month, year).then(function (response) {
             $scope.tenants = response.data.filter(function (t) { return t.isAssigned; });
             $scope.unassignedTenants = response.data.filter(function (t) { return !t.isAssigned; });
-            $scope.rentIncreaseCount = response.data.filter(function (t) { return t.needsRentIncrease; }).length;
+            $scope.rentIncreaseCount = 0;
         });
 
-        var p2 = apiService.getRooms().then(function (response) {
+        var p2 = apiService.getRooms(month, year).then(function (response) {
             $scope.availableRooms = response.data.filter(function (room) {
                 return room.isAvailable;
             });
@@ -40,16 +33,22 @@ app.controller('TenantsController', function ($scope, $rootScope, $http, apiServ
         });
     }
 
+    // Listen for period change
+    var deregister = $rootScope.$on('periodChanged', function (event, data) {
+        loadTenants(data.month, data.year);
+    });
+    $scope.$on('$destroy', deregister);
+
     $scope.openAddTenant = function () {
-        var now = new Date();
         $scope.newTenant = {
+            name: '',
             firstName: '',
             lastName: '',
             phoneNumber: '',
             email: '',
             address: '',
             roomId: '',
-            startDate: now.toISOString().split('T')[0],
+            startDate: new Date().toISOString().split('T')[0],
             monthlyRent: 0,
             securityDeposit: 0
         };
@@ -59,7 +58,7 @@ app.controller('TenantsController', function ($scope, $rootScope, $http, apiServ
 
     $scope.onRoomSelectForTenant = function () {
         if ($scope.newTenant.roomId) {
-            var room = $scope.availableRooms.find(function (r) { return r.id == $scope.newTenant.roomId; });
+            var room = $scope.availableRooms.find(function (r) { return r.flatId == $scope.newTenant.roomId; });
             if (room) {
                 $scope.newTenant.monthlyRent = room.monthlyRent;
             }
@@ -67,46 +66,49 @@ app.controller('TenantsController', function ($scope, $rootScope, $http, apiServ
     };
 
     $scope.saveTenant = function () {
+        var tenantName = $scope.newTenant.name ||
+            (($scope.newTenant.firstName || '') + ' ' + ($scope.newTenant.lastName || '')).trim();
+
+        if (!tenantName) {
+            alert('Tenant name is required');
+            return;
+        }
+
         var tenantData = {
+            name: tenantName,
             firstName: $scope.newTenant.firstName,
-            lastName: $scope.newTenant.lastName,
-            phoneNumber: $scope.newTenant.phoneNumber,
-            email: $scope.newTenant.email,
-            address: $scope.newTenant.address,
-            idProofType: $scope.newTenant.idProofType,
-            idProofNumber: $scope.newTenant.idProofNumber
+            lastName: $scope.newTenant.lastName
         };
 
         // Add room assignment if selected
         if ($scope.newTenant.roomId) {
-            tenantData.roomId = parseInt($scope.newTenant.roomId);
+            tenantData.roomId = $scope.newTenant.roomId;
+            tenantData.flatId = $scope.newTenant.roomId;
             tenantData.startDate = $scope.newTenant.startDate;
             tenantData.monthlyRent = $scope.newTenant.monthlyRent;
             tenantData.securityDeposit = $scope.newTenant.securityDeposit;
         }
 
-        if ($scope.newTenant.id) {
+        if ($scope.newTenant.tenantId) {
             // Update existing
-            tenantData.id = $scope.newTenant.id;
-            tenantData.isActive = true;
-            apiService.updateTenant($scope.newTenant.id, tenantData).then(function () {
+            apiService.updateTenant($scope.newTenant.tenantId, tenantData).then(function () {
                 loadTenants();
                 closeModal('addTenantModal');
                 alert('Tenant updated successfully!');
             }, function (err) {
-                alert('Error updating tenant');
+                alert('Error updating tenant: ' + (err.data?.message || err.data || 'Unknown error'));
             });
         } else {
             // Create new
             $http.post('/api/Tenants', tenantData).then(function (response) {
-                loadTenants(); // Refresh list immediately
+                loadTenants();
                 closeModal('addTenantModal');
                 var msg = tenantData.roomId ?
                     'Tenant added and assigned to room!' :
                     'Tenant added to waiting queue!';
                 alert(msg);
             }, function (err) {
-                alert('Error adding tenant');
+                alert('Error adding tenant: ' + (err.data?.message || err.data || 'Unknown error'));
             });
         }
     };
@@ -118,7 +120,8 @@ app.controller('TenantsController', function ($scope, $rootScope, $http, apiServ
     };
 
     $scope.viewTenantDetails = function (tenant) {
-        $http.get('/api/Tenants/' + tenant.id).then(function (response) {
+        var id = tenant.tenantId || tenant.id;
+        $http.get('/api/Tenants/' + id).then(function (response) {
             $scope.selectedTenant = response.data;
             var modal = new bootstrap.Modal(document.getElementById('tenantDetailsModal'));
             modal.show();
@@ -140,7 +143,7 @@ app.controller('TenantsController', function ($scope, $rootScope, $http, apiServ
 
     $scope.onRoomSelectForAssign = function () {
         if ($scope.roomAssignment.roomId) {
-            var room = $scope.availableRooms.find(function (r) { return r.id == $scope.roomAssignment.roomId; });
+            var room = $scope.availableRooms.find(function (r) { return r.flatId == $scope.roomAssignment.roomId; });
             if (room) {
                 $scope.roomAssignment.monthlyRent = room.monthlyRent;
             }
@@ -148,19 +151,21 @@ app.controller('TenantsController', function ($scope, $rootScope, $http, apiServ
     };
 
     $scope.confirmAssignRoom = function () {
+        var tenantId = $scope.assigningTenant.tenantId || $scope.assigningTenant.id;
         var data = {
-            roomId: parseInt($scope.roomAssignment.roomId),
+            flatId: $scope.roomAssignment.roomId,
+            roomId: $scope.roomAssignment.roomId,
             startDate: $scope.roomAssignment.startDate,
             monthlyRent: $scope.roomAssignment.monthlyRent,
             securityDeposit: $scope.roomAssignment.securityDeposit
         };
 
-        $http.post('/api/Tenants/' + $scope.assigningTenant.id + '/assign', data).then(function (response) {
+        $http.post('/api/Tenants/' + tenantId + '/assign', data).then(function (response) {
             loadTenants();
             closeModal('assignRoomModal');
             alert(response.data.message);
         }, function (err) {
-            alert('Error assigning room');
+            alert('Error assigning room: ' + (err.data?.message || err.data || 'Unknown error'));
         });
     };
 
