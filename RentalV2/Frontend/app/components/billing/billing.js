@@ -28,7 +28,8 @@ app.controller('BillingController', function ($scope, $rootScope, $http, apiServ
 
         $scope.loading = true;
         apiService.updateBill(bill.id, {
-            currentReading: bill.elecNew
+            currentReading: bill.elecNew,
+            monthlyRent: bill.monthlyRent
         }).then(function () {
             // Reload to get updated calculations
             var month = parseInt($rootScope.selectedMonth) || new Date().getMonth() + 1;

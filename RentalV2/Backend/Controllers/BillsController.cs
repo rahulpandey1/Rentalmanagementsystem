@@ -191,7 +191,7 @@ namespace RentalBackend.Controllers
         /// Update meter reading and recalculate bill
         /// </summary>
         [HttpPut("{id}")]
-        public async Task<IActionResult> UpdateBill(Guid id, [FromBody] BillUpdateModel model)
+        public async Task<IActionResult> UpdateBill([FromRoute] Guid id, [FromBody] BillUpdateModel model)
         {
             var ledger = await _context.MonthlyLedgers.FindAsync(id);
             if (ledger == null) return NotFound();
@@ -201,9 +201,14 @@ namespace RentalBackend.Controllers
             {
                 ledger.ElecNew = model.CurrentReading.Value;
                 ledger.ElecUnits = ledger.ElecNew - ledger.ElecPrev;
-                if (ledger.ElecUnits < 0) ledger.ElecUnits = 0; // Prevent negative consumption? Or allow for rollover? Assuming non-negative for now.
+                if (ledger.ElecUnits < 0) ledger.ElecUnits = 0; 
                 
                 ledger.ElecCost = ledger.ElecUnits * ledger.ElecRate;
+            }
+
+            if (model.MonthlyRent.HasValue)
+            {
+                ledger.MonthlyRent = model.MonthlyRent.Value;
             }
 
             if (model.MiscAmount.HasValue)
@@ -232,6 +237,7 @@ namespace RentalBackend.Controllers
         public class BillUpdateModel
         {
             public decimal? CurrentReading { get; set; }
+            public decimal? MonthlyRent { get; set; }
             public decimal? MiscAmount { get; set; }
             public string? Remarks { get; set; }
         }

@@ -84,6 +84,8 @@
                             <th>Tenant</th>
                             <th>Room</th>
                             <th>Period</th>
+                            <th>Readings</th>
+                            <th>Rent</th>
                             <th>Total</th>
                             <th>Paid</th>
                             <th>Status</th>
@@ -101,11 +103,20 @@
                                     <input type="number" class="form-control" ng-model="bill.elecNew"
                                         placeholder="Reading">
                                     <button class="btn btn-outline-secondary" type="button"
-                                        ng-click="updateReading(bill)" title="Save Reading">
+                                        ng-click="updateReading(bill)" title="Save Details">
                                         <i class="fas fa-save"></i>
                                     </button>
                                 </div>
                                 <small class="text-muted" ng-if="bill.elecPrev">Prev: {{bill.elecPrev}}</small>
+                            </td>
+                            <td>
+                                <div class="input-group input-group-sm" style="width: 100px;">
+                                    <span class="input-group-text">₹</span>
+                                    <input type="number" class="form-control" ng-model="bill.monthlyRent"
+                                        placeholder="Rent">
+                                </div>
+                                <small class="text-muted" ng-if="bill.totalAmount">Total: {{bill.totalAmount |
+                                    number}}</small>
                             </td>
                             <td>₹{{ bill.totalAmount | number }}</td>
                             <td class="text-success">₹{{ bill.paidAmount | number }}</td>
