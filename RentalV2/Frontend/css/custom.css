@@ -1,0 +1,122 @@
+/* Soft Color Palette */
+
+:root {
+    --soft-primary-bg: #E3F2FD;
+    --soft-primary-text: #1565C0;
+    --soft-success-bg: #E8F5E9;
+    --soft-success-text: #2E7D32;
+    --soft-danger-bg: #FFEBEE;
+    --soft-danger-text: #C62828;
+    --soft-warning-bg: #FFF3E0;
+    --soft-warning-text: #EF6C00;
+    --soft-info-bg: #E1F5FE;
+    --soft-info-text: #0277BD;
+    --soft-secondary-bg: #E0E0E0; /* Light Grey */
+    --soft-secondary-text: #424242; /* Darker Grey for contrast */
+}
+
+/* Background Utility Classes */
+.bg-soft-primary {
+    background-color: var(--soft-primary-bg) !important;
+    color: var(--soft-primary-text) !important;
+}
+
+.bg-soft-success {
+    background-color: var(--soft-success-bg) !important;
+    color: var(--soft-success-text) !important;
+}
+
+.bg-soft-danger {
+    background-color: var(--soft-danger-bg) !important;
+    color: var(--soft-danger-text) !important;
+}
+
+.bg-soft-warning {
+    background-color: var(--soft-warning-bg) !important;
+    color: var(--soft-warning-text) !important;
+}
+
+.bg-soft-info {
+    background-color: var(--soft-info-bg) !important;
+    color: var(--soft-info-text) !important;
+}
+
+/* Border Utilities */
+.border-soft-primary { border-color: var(--soft-primary-bg) !important; }
+.border-soft-success { border-color: var(--soft-success-bg) !important; }
+.border-soft-danger { border-color: var(--soft-danger-bg) !important; }
+.border-soft-warning { border-color: var(--soft-warning-bg) !important; }
+
+/* Text Utilities */
+.text-soft-primary { color: var(--soft-primary-text) !important; }
+.text-soft-success { color: var(--soft-success-text) !important; }
+.text-soft-danger { color: var(--soft-danger-text) !important; }
+.text-soft-warning { color: var(--soft-warning-text) !important; }
+
+/* Card Enhancements */
+.card {
+    transition: transform 0.2s ease-in-out, box-shadow 0.2s ease-in-out;
+    border: none;
+}
+
+.card:hover {
+    transform: translateY(-5px);
+    box-shadow: 0 0.5rem 1rem rgba(0, 0, 0, 0.1);
+}
+
+/* Room Card Header Enhancement */
+.room-card-header {
+    font-weight: 600;
+    border-bottom: none; 
+}
+
+/* Button Soft Variants (Optional) */
+.btn-soft-primary {
+    background-color: var(--soft-primary-bg);
+    color: var(--soft-primary-text);
+    border: none;
+}
+.btn-soft-primary:hover {
+    background-color: #BBDEFB; /* Slightly darker shade */
+    color: var(--soft-primary-text);
+}
+
+.btn-soft-success {
+    background-color: var(--soft-success-bg);
+    color: var(--soft-success-text);
+    border: none;
+}
+.btn-soft-success:hover {
+    background-color: #C8E6C9;
+    color: var(--soft-success-text);
+}
+
+.btn-soft-danger {
+    background-color: var(--soft-danger-bg);
+    color: var(--soft-danger-text);
+    border: none;
+}
+.btn-soft-danger:hover {
+    background-color: #FFCDD2;
+    color: var(--soft-danger-text);
+}
+
+.btn-soft-warning {
+    background-color: var(--soft-warning-bg);
+    color: var(--soft-warning-text);
+    border: none;
+}
+.btn-soft-warning:hover {
+    background-color: #FFE0B2;
+    color: var(--soft-warning-text);
+}
+
+.btn-soft-info {
+    background-color: var(--soft-info-bg);
+    color: var(--soft-info-text);
+    border: none;
+}
+.btn-soft-info:hover {
+    background-color: #B3E5FC;
+    color: var(--soft-info-text);
+}

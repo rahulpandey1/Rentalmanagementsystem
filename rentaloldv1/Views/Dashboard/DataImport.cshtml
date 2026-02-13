@@ -1,0 +1,483 @@
+@{
+    ViewData["Title"] = "Data Import - SITA DEVI PANDEY";
+}
+
+<div class="row">
+    <div class="col-12">
+        <h1><i class="fas fa-file-excel"></i> Excel Data Import</h1>
+        <p class="lead">Import tenant, payment, and billing data from SITA DEVI PANDEY Excel files</p>
+    </div>
+</div>
+
+<!-- Import Status Cards -->
+<div class="row">
+    <div class="col-md-4">
+        <div class="card border-primary">
+            <div class="card-header bg-primary text-white">
+                <h6><i class="fas fa-file-excel"></i> File Status</h6>
+            </div>
+            <div class="card-body">
+                <div id="fileStatus">
+                    <div class="text-center">
+                        <div class="spinner-border text-primary" role="status">
+                            <span class="visually-hidden">Checking...</span>
+                        </div>
+                        <p class="mt-2">Checking file status...</p>
+                    </div>
+                </div>
+            </div>
+        </div>
+    </div>
+    
+    <div class="col-md-4">
+        <div class="card border-success">
+            <div class="card-header bg-success text-white">
+                <h6><i class="fas fa-upload"></i> Quick Import</h6>
+            </div>
+            <div class="card-body">
+                <p class="card-text">Import from existing Excel file</p>
+                <button id="quickImportBtn" class="btn btn-success w-100" disabled>
+                    <i class="fas fa-play"></i> Import Now
+                </button>
+            </div>
+        </div>
+    </div>
+    
+    <div class="col-md-4">
+        <div class="card border-info">
+            <div class="card-header bg-info text-white">
+                <h6><i class="fas fa-cloud-upload-alt"></i> Upload New File</h6>
+            </div>
+            <div class="card-body">
+                <form id="uploadForm" enctype="multipart/form-data">
+                    <div class="mb-3">
+                        <input type="file" class="form-control" id="excelFile" accept=".xlsx" required>
+                        <div class="form-text">Supports .xlsx files (with or without password protection)</div>
+                    </div>
+                    <button type="submit" class="btn btn-info w-100">
+                        <i class="fas fa-upload"></i> Upload & Import
+                    </button>
+                </form>
+            </div>
+        </div>
+    </div>
+</div>
+
+<!-- Import Results -->
+<div class="row mt-4" id="importResults" style="display: none;">
+    <div class="col-12">
+        <div class="card">
+            <div class="card-header">
+                <h5><i class="fas fa-chart-bar"></i> Import Results</h5>
+            </div>
+            <div class="card-body" id="importResultsContent">
+                <!-- Results will be populated here -->
+            </div>
+        </div>
+    </div>
+</div>
+
+<!-- Expected Excel Format Guide -->
+<div class="row mt-4">
+    <div class="col-12">
+        <div class="card">
+            <div class="card-header">
+                <h5><i class="fas fa-info-circle"></i> Supported Excel Formats</h5>
+            </div>
+            <div class="card-body">
+                <div class="row">
+                    <div class="col-md-6">
+                        <h6><i class="fas fa-star text-warning"></i> SITA DEVI PANDEY Format (Auto-detected)</h6>
+                        <p>The system automatically detects and processes your specific Excel format with columns:</p>
+                        <ul class="list-group list-group-flush">
+                            <li class="list-group-item">SNO, NAME, ROOM NO</li>
+                            <li class="list-group-item">MTLY RENT, ELECTRIC (NEW/PRE/COST)</li>
+                            <li class="list-group-item">MISC RENT, TOTAL AMT DUE</li>
+                            <li class="list-group-item">AMT PAID, REMARKS</li>
+                        </ul>
+                        
+                        <div class="alert alert-info mt-3">
+                            <i class="fas fa-lightbulb"></i> <strong>Smart Features:</strong>
+                            <ul class="mb-0">
+                                <li>Extracts start dates from remarks (WEF)</li>
+                                <li>Parses advance amounts (ADV 5K)</li>
+                                <li>Handles vacant rooms automatically</li>
+                                <li>Creates bills for detected periods</li>
+                                <li>Supports both password-protected and regular Excel files</li>
+                            </ul>
+                        </div>
+                    </div>
+                    
+                    <div class="col-md-6">
+                        <h6><i class="fas fa-table"></i> Standard Format Support</h6>
+                        <p>Also supports standard worksheets:</p>
+                        
+                        <div class="accordion" id="formatAccordion">
+                            <div class="accordion-item">
+                                <h2 class="accordion-header">
+                                    <button class="accordion-button collapsed" type="button" data-bs-toggle="collapse" data-bs-target="#tenantsFormat">
+                                        Tenants Sheet
+                                    </button>
+                                </h2>
+                                <div id="tenantsFormat" class="accordion-collapse collapse">
+                                    <div class="accordion-body">
+                                        <small>First Name | Last Name | Email | Phone | Address | Date of Birth</small>
+                                    </div>
+                                </div>
+                            </div>
+                            
+                            <div class="accordion-item">
+                                <h2 class="accordion-header">
+                                    <button class="accordion-button collapsed" type="button" data-bs-toggle="collapse" data-bs-target="#paymentsFormat">
+                                        Payments Sheet
+                                    </button>
+                                </h2>
+                                <div id="paymentsFormat" class="accordion-collapse collapse">
+                                    <div class="accordion-body">
+                                        <small>Tenant Name | Room Number | Amount | Date | Type | Status | Method</small>
+                                    </div>
+                                </div>
+                            </div>
+                            
+                            <div class="accordion-item">
+                                <h2 class="accordion-header">
+                                    <button class="accordion-button collapsed" type="button" data-bs-toggle="collapse" data-bs-target="#electricFormat">
+                                        Electric Readings Sheet
+                                    </button>
+                                </h2>
+                                <div id="electricFormat" class="accordion-collapse collapse">
+                                    <div class="accordion-body">
+                                        <small>Room Number | Current Reading | Previous Reading | Date</small>
+                                    </div>
+                                </div>
+                            </div>
+                        </div>
+
+                        <div class="alert alert-success mt-3">
+                            <i class="fas fa-shield-alt"></i> <strong>File Support:</strong>
+                            <ul class="mb-0">
+                                <li><strong>Password Protected</strong>: Automatically detects and uses known passwords</li>
+                                <li><strong>Regular Files</strong>: Standard Excel files without password protection</li>
+                                <li><strong>Auto-Detection</strong>: System tries both methods automatically</li>
+                            </ul>
+                        </div>
+                    </div>
+                </div>
+            </div>
+        </div>
+    </div>
+</div>
+
+<!-- Progress Modal -->
+<div class="modal fade" id="progressModal" tabindex="-1" aria-hidden="true">
+    <div class="modal-dialog modal-dialog-centered">
+        <div class="modal-content">
+            <div class="modal-header">
+                <h5 class="modal-title">
+                    <i class="fas fa-cog fa-spin"></i> Importing Data
+                </h5>
+            </div>
+            <div class="modal-body text-center">
+                <div class="progress mb-3">
+                    <div class="progress-bar progress-bar-striped progress-bar-animated" 
+                         role="progressbar" style="width: 100%"></div>
+                </div>
+                <p>Processing your Excel file...</p>
+                <small class="text-muted">This may take a few moments depending on the file size.</small>
+            </div>
+        </div>
+    </div>
+</div>
+
+@section Scripts {
+<script>
+document.addEventListener('DOMContentLoaded', function() {
+    // Check file status on page load
+    checkFileStatus();
+    
+    // Quick import button handler
+    document.getElementById('quickImportBtn').addEventListener('click', function() {
+        performQuickImport();
+    });
+    
+    // Upload form handler
+    document.getElementById('uploadForm').addEventListener('submit', function(e) {
+        e.preventDefault();
+        performFileUpload();
+    });
+});
+
+function checkFileStatus() {
+    fetch('/api/DataImport/status')
+        .then(response => response.json())
+        .then(data => {
+            updateFileStatus(data);
+        })
+        .catch(error => {
+            console.error('Error checking file status:', error);
+            updateFileStatus({ ExcelFileExists: false, error: error.message });
+        });
+}
+
+function updateFileStatus(data) {
+    const statusDiv = document.getElementById('fileStatus');
+    const quickImportBtn = document.getElementById('quickImportBtn');
+    
+    if (data.ExcelFileExists || (data.AvailableFiles && data.AvailableFiles.length > 0)) {
+        let fileInfo = '';
+        if (data.AvailableFiles && data.AvailableFiles.length > 0) {
+            const totalFiles = data.AvailableFiles.length;
+            const totalSize = data.AvailableFiles.reduce((sum, file) => sum + file.FileSize, 0);
+            const fileSize = (totalSize / 1024).toFixed(1);
+            
+            fileInfo = `
+                <div class="text-success">
+                    <i class="fas fa-check-circle fa-2x mb-2"></i>
+                    <h6>Files Ready</h6>
+                    <small>${totalFiles} file(s) found<br>
+                    Total size: ${fileSize} KB</small>
+                </div>
+            `;
+        } else {
+            const fileSize = (data.FileSize / 1024).toFixed(1);
+            const lastModified = new Date(data.LastModified).toLocaleString();
+            
+            fileInfo = `
+                <div class="text-success">
+                    <i class="fas fa-check-circle fa-2x mb-2"></i>
+                    <h6>File Ready</h6>
+                    <small>Size: ${fileSize} KB<br>
+                    Modified: ${lastModified}</small>
+                </div>
+            `;
+        }
+        
+        statusDiv.innerHTML = fileInfo;
+        quickImportBtn.disabled = false;
+    } else {
+        statusDiv.innerHTML = `
+            <div class="text-warning">
+                <i class="fas fa-exclamation-triangle fa-2x mb-2"></i>
+                <h6>No File Found</h6>
+                <small>Upload an Excel file to begin</small>
+            </div>
+        `;
+        quickImportBtn.disabled = true;
+    }
+}
+
+function performQuickImport() {
+    showProgressModal();
+    
+    fetch('/api/DataImport/excel', {
+        method: 'POST'
+    })
+    .then(response => response.json())
+    .then(data => {
+        hideProgressModal();
+        showImportResults(data);
+    })
+    .catch(error => {
+        hideProgressModal();
+        console.error('Import error:', error);
+        showImportResults({ 
+            Success: false, 
+            Message: 'Import failed', 
+            Error: error.message 
+        });
+    });
+}
+
+function performFileUpload() {
+    const fileInput = document.getElementById('excelFile');
+    const file = fileInput.files[0];
+    
+    if (!file) {
+        alert('Please select a file');
+        return;
+    }
+    
+    if (!file.name.toLowerCase().endsWith('.xlsx')) {
+        alert('Please select a .xlsx file');
+        return;
+    }
+    
+    const formData = new FormData();
+    formData.append('file', file);
+    
+    showProgressModal();
+    
+    fetch('/api/DataImport/upload', {
+        method: 'POST',
+        body: formData
+    })
+    .then(response => response.json())
+    .then(data => {
+        hideProgressModal();
+        showImportResults(data);
+        fileInput.value = ''; // Clear file input
+    })
+    .catch(error => {
+        hideProgressModal();
+        console.error('Upload error:', error);
+        showImportResults({ 
+            Success: false, 
+            Message: 'Upload failed', 
+            Error: error.message 
+        });
+    });
+}
+
+function showImportResults(data) {
+    const resultsDiv = document.getElementById('importResults');
+    const contentDiv = document.getElementById('importResultsContent');
+    
+    if (data.Success) {
+        const importData = data.ImportedData;
+        const importStats = data.ImportStats || {};
+        
+        contentDiv.innerHTML = `
+            <div class="alert alert-success">
+                <h5><i class="fas fa-check-circle"></i> Import Successful!</h5>
+                <p>${data.Message}</p>
+                ${importStats.BillPeriod ? `<p><strong>Bill Period:</strong> ${importStats.BillPeriod}</p>` : ''}
+            </div>
+            
+            <div class="row">
+                <div class="col-md-2">
+                    <div class="card bg-primary text-white">
+                        <div class="card-body text-center">
+                            <h4>${importData.Tenants || 0}</h4>
+                            <small>Tenants</small>
+                        </div>
+                    </div>
+                </div>
+                <div class="col-md-2">
+                    <div class="card bg-success text-white">
+                        <div class="card-body text-center">
+                            <h4>${importData.Payments || 0}</h4>
+                            <small>Payments</small>
+                        </div>
+                    </div>
+                </div>
+                <div class="col-md-2">
+                    <div class="card bg-info text-white">
+                        <div class="card-body text-center">
+                            <h4>${importData.Bills || 0}</h4>
+                            <small>Bills</small>
+                        </div>
+                    </div>
+                </div>
+                <div class="col-md-2">
+                    <div class="card bg-warning text-white">
+                        <div class="card-body text-center">
+                            <h4>${importData.Agreements || 0}</h4>
+                            <small>Agreements</small>
+                        </div>
+                    </div>
+                </div>
+                <div class="col-md-2">
+                    <div class="card bg-secondary text-white">
+                        <div class="card-body text-center">
+                            <h4>${importData.ElectricReadings || 0}</h4>
+                            <small>Electric</small>
+                        </div>
+                    </div>
+                </div>
+                <div class="col-md-2">
+                    <div class="card bg-dark text-white">
+                        <div class="card-body text-center">
+                            <h4>${importData.Total || 0}</h4>
+                            <small>Total</small>
+                        </div>
+                    </div>
+                </div>
+            </div>
+            
+            ${importStats.VacantRoomsFound > 0 ? `
+                <div class="alert alert-info mt-3">
+                    <i class="fas fa-info-circle"></i> 
+                    <strong>Additional Info:</strong> Found ${importStats.VacantRoomsFound} vacant rooms
+                </div>
+            ` : ''}
+            
+            ${data.Errors && data.Errors.length > 0 ? `
+                <div class="alert alert-warning mt-3">
+                    <h6><i class="fas fa-exclamation-triangle"></i> Warnings:</h6>
+                    <ul class="mb-0">
+                        ${data.Errors.map(error => `<li>${error}</li>`).join('')}
+                    </ul>
+                </div>
+            ` : ''}
+            
+            <div class="mt-3">
+                <a href="/Dashboard" class="btn btn-primary">
+                    <i class="fas fa-tachometer-alt"></i> View Dashboard
+                </a>
+                <a href="/Dashboard/BillingSummary" class="btn btn-success">
+                    <i class="fas fa-chart-pie"></i> View Billing Summary
+                </a>
+            </div>
+        `;
+    } else {
+        contentDiv.innerHTML = `
+            <div class="alert alert-danger">
+                <h5><i class="fas fa-exclamation-circle"></i> Import Failed</h5>
+                <p>${data.Message}</p>
+                ${data.Error ? `<small><strong>Error:</strong> ${data.Error}</small>` : ''}
+            </div>
+            
+            <div class="alert alert-info">
+                <h6>Troubleshooting Tips:</h6>
+                <ul class="mb-0">
+                    <li>The system automatically handles both password-protected and regular Excel files</li>
+                    <li>Check that the file contains the expected SITA DEVI PANDEY format</li>
+                    <li>Verify the database connection is working</li>
+                    <li>Make sure the file is not corrupted</li>
+                </ul>
+            </div>
+        `;
+    }
+    
+    resultsDiv.style.display = 'block';
+    resultsDiv.scrollIntoView({ behavior: 'smooth' });
+}
+
+function showProgressModal() {
+    const modal = new bootstrap.Modal(document.getElementById('progressModal'));
+    modal.show();
+}
+
+function hideProgressModal() {
+    const modal = bootstrap.Modal.getInstance(document.getElementById('progressModal'));
+    if (modal) {
+        modal.hide();
+    }
+}
+</script>
+}
+
+<style>
+.card {
+    transition: transform 0.2s;
+}
+
+.card:hover {
+    transform: translateY(-2px);
+    box-shadow: 0 4px 8px rgba(0,0,0,0.1);
+}
+
+.spinner-border {
+    width: 2rem;
+    height: 2rem;
+}
+
+.progress {
+    height: 10px;
+}
+
+.accordion-button:not(.collapsed) {
+    background-color: #e7f3ff;
+    color: #0d6efd;
+}
+</style>

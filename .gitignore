@@ -1,0 +1,14 @@
+﻿################################################################################
+# This .gitignore file was automatically created by Microsoft(R) Visual Studio.
+################################################################################
+
+/rentaloldv1/.vs
+/rentaloldv1/bin/Debug/net8.0
+/.vs
+/rentaloldv1/obj
+/RentalV2/.vs
+/RentalV2/Backend/bin/Debug/net8.0
+/RentalV2/Backend/obj
+/RentalV2 - Copy/.vs
+/RentalV2 - Copy/Backend/bin/Debug/net8.0
+/RentalV2 - Copy/Backend/obj

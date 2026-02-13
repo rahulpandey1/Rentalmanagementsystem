@@ -1,0 +1,42 @@
+<div class="container-fluid">
+    <div ng-if="loading" class="loader-overlay">
+        <div class="spinner-border text-primary" role="status">
+            <span class="visually-hidden">Loading...</span>
+        </div>
+    </div>
+
+    <div class="d-flex justify-content-between align-items-center mb-4">
+        <h2>Room Management</h2>
+        <select class="form-select w-auto" ng-model="filterFloor">
+            <option value="">All Floors</option>
+            <option value="0">Ground Floor</option>
+            <option value="1">First Floor</option>
+            <option value="2">Second Floor</option>
+        </select>
+    </div>
+
+    <div class="row g-4">
+        <div class="col-md-4 col-lg-3" ng-repeat="room in rooms | filter:filterRooms">
+            <div class="card h-100" ng-class="{'border-success': room.isAvailable, 'border-danger': !room.isAvailable}">
+                <div class="card-header d-flex justify-content-between align-items-center"
+                    ng-class="{'bg-success text-white': room.isAvailable, 'bg-danger text-white': !room.isAvailable}">
+                    <h5 class="mb-0">{{ room.roomNumber }}</h5>
+                    <span class="badge bg-light text-dark">{{ room.isAvailable ? 'Available' : 'Occupied' }}</span>
+                </div>
+                <div class="card-body">
+                    <p class="card-text"><strong>Floor:</strong> {{ room.floorNumber }}</p>
+                    <p class="card-text"><strong>Rent:</strong> {{ room.monthlyRent | currency:'₹' }}</p>
+                    <p class="card-text" ng-if="!room.isAvailable && room.rentAgreements.length > 0">
+                        <strong>Tenant:</strong> {{ room.rentAgreements[0].tenant.firstName }} {{
+                        room.rentAgreements[0].tenant.lastName }}
+                    </p>
+                    <div class="form-check form-switch mt-3">
+                        <input class="form-check-input" type="checkbox" ng-model="room.isAvailable"
+                            ng-change="toggleAvailability(room)">
+                        <label class="form-check-label">Available</label>
+                    </div>
+                </div>
+            </div>
+        </div>
+    </div>
+</div>

@@ -1,0 +1,173 @@
+@{
+    ViewData["Title"] = "Rooms Management";
+}
+
+<div class="row">
+    <div class="col-12">
+        <h1><i class="fas fa-bed"></i> Rooms Management</h1>
+        <p class="lead">Manage all 22 rooms in your boarding house</p>
+    </div>
+</div>
+
+<div class="row">
+    <div class="col-12">
+        <div class="card">
+            <div class="card-header d-flex justify-content-between align-items-center">
+                <h5><i class="fas fa-list"></i> All Rooms</h5>
+                <div>
+                    <button class="btn btn-primary" onclick="loadRooms()">
+                        <i class="fas fa-refresh"></i> Refresh
+                    </button>
+                    <button class="btn btn-success" onclick="showAddRoomModal()">
+                        <i class="fas fa-plus"></i> Add Room
+                    </button>
+                </div>
+            </div>
+            <div class="card-body">
+                <div class="table-responsive">
+                    <table class="table table-striped" id="roomsTable">
+                        <thead>
+                            <tr>
+                                <th>Room Number</th>
+                                <th>Floor</th>
+                                <th>Area (sq ft)</th>
+                                <th>Monthly Rent</th>
+                                <th>Status</th>
+                                <th>Current Tenant</th>
+                                <th>Actions</th>
+                            </tr>
+                        </thead>
+                        <tbody id="roomsTableBody">
+                            <tr>
+                                <td colspan="7" class="text-center">
+                                    <div class="spinner-border" role="status">
+                                        <span class="visually-hidden">Loading...</span>
+                                    </div>
+                                </td>
+                            </tr>
+                        </tbody>
+                    </table>
+                </div>
+            </div>
+        </div>
+    </div>
+</div>
+
+@section Scripts {
+<script>
+    // Load rooms on page load
+    document.addEventListener('DOMContentLoaded', function() {
+        loadRooms();
+    });
+
+    async function loadRooms() {
+        try {
+            const response = await fetch('/api/rooms');
+            const rooms = await response.json();
+            
+            const tbody = document.getElementById('roomsTableBody');
+            tbody.innerHTML = '';
+            
+            if (rooms.length === 0) {
+                tbody.innerHTML = '<tr><td colspan="7" class="text-center">No rooms found</td></tr>';
+                return;
+            }
+            
+            rooms.forEach(room => {
+                const statusBadge = room.isAvailable 
+                    ? '<span class="badge bg-success">Available</span>'
+                    : '<span class="badge bg-danger">Occupied</span>';
+                
+                const currentTenant = room.isAvailable ? '-' : 'Loading...';
+                
+                const row = `
+                    <tr>
+                        <td><strong>${room.roomNumber}</strong></td>
+                        <td>${room.floor}</td>
+                        <td>${room.area}</td>
+                        <td>$${room.monthlyRent.toLocaleString()}</td>
+                        <td>${statusBadge}</td>
+                        <td id="tenant-${room.id}">${currentTenant}</td>
+                        <td>
+                            <div class="btn-group" role="group">
+                                <button class="btn btn-sm btn-outline-primary" onclick="editRoom(${room.id})">
+                                    <i class="fas fa-edit"></i>
+                                </button>
+                                <button class="btn btn-sm btn-outline-info" onclick="viewRoom(${room.id})">
+                                    <i class="fas fa-eye"></i>
+                                </button>
+                                ${room.isAvailable ? 
+                                    '<button class="btn btn-sm btn-outline-success" onclick="assignTenant(' + room.id + ')"><i class="fas fa-user-plus"></i></button>' :
+                                    '<button class="btn btn-sm btn-outline-warning" onclick="vacateRoom(' + room.id + ')"><i class="fas fa-user-minus"></i></button>'
+                                }
+                            </div>
+                        </td>
+                    </tr>
+                `;
+                tbody.innerHTML += row;
+                
+                // Load tenant info for occupied rooms
+                if (!room.isAvailable) {
+                    loadTenantForRoom(room.id);
+                }
+            });
+        } catch (error) {
+            console.error('Error loading rooms:', error);
+            document.getElementById('roomsTableBody').innerHTML = 
+                '<tr><td colspan="7" class="text-center text-danger">Error loading rooms</td></tr>';
+        }
+    }
+
+    async function loadTenantForRoom(roomId) {
+        try {
+            const response = await fetch(`/api/rentagreements/room/${roomId}`);
+            if (response.ok) {
+                const agreement = await response.json();
+                if (agreement && agreement.tenant) {
+                    document.getElementById(`tenant-${roomId}`).textContent = agreement.tenant.fullName;
+                }
+            }
+        } catch (error) {
+            console.error('Error loading tenant for room:', error);
+        }
+    }
+
+    function editRoom(roomId) {
+        // Implement edit room functionality
+        alert('Edit room functionality - to be implemented');
+    }
+
+    function viewRoom(roomId) {
+        // Implement view room details
+        alert('View room details - to be implemented');
+    }
+
+    function assignTenant(roomId) {
+        // Implement assign tenant functionality
+        alert('Assign tenant functionality - to be implemented');
+    }
+
+    function vacateRoom(roomId) {
+        // Implement vacate room functionality
+        if (confirm('Are you sure you want to terminate the current rental agreement for this room?')) {
+            alert('Vacate room functionality - to be implemented');
+        }
+    }
+
+    function showAddRoomModal() {
+        // Implement add room functionality
+        alert('Add room functionality - to be implemented');
+    }
+</script>
+}
+
+<style>
+    .table th {
+        background-color: #f8f9fa;
+        font-weight: 600;
+    }
+    
+    .btn-group .btn {
+        margin-right: 2px;
+    }
+</style>

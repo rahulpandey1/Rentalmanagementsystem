@@ -1,0 +1,160 @@
+<div class="container-fluid">
+    <div ng-if="loading" class="loader-overlay">
+        <div class="spinner-border text-primary" role="status">
+            <span class="visually-hidden">Loading...</span>
+        </div>
+    </div>
+
+    <div class="d-flex justify-content-between align-items-center mb-4 d-print-none">
+        <h2>Monthly Summary Report</h2>
+        <div class="d-flex gap-2">
+            <select class="form-select w-auto" ng-model="selectedMonth" ng-change="loadSummary()">
+                <option value="1">January</option>
+                <option value="2">February</option>
+                <option value="3">March</option>
+                <option value="4">April</option>
+                <option value="5">May</option>
+                <option value="6">June</option>
+                <option value="7">July</option>
+                <option value="8">August</option>
+                <option value="9">September</option>
+                <option value="10">October</option>
+                <option value="11">November</option>
+                <option value="12">December</option>
+            </select>
+            <select class="form-select w-auto" ng-model="selectedYear" ng-change="loadSummary()">
+                <option ng-repeat="year in years" value="{{year}}">{{year}}</option>
+            </select>
+            <button class="btn btn-outline-primary" onclick="window.print()">
+                <i class="fas fa-print"></i> Print
+            </button>
+            <button class="btn btn-success" ng-click="exportToExcel()">
+                <i class="fas fa-file-excel"></i> Export
+            </button>
+        </div>
+    </div>
+
+    <div class="card">
+        <div class="card-header bg-white text-center">
+            <h4 class="mb-0">SITA DEVI PANDEY HOUSING PROJECT</h4>
+            <small class="text-muted">11/1B/1 GANPAT RAI KHEMKA LANE LILUAH HOWRAH(W. B.) 711204</small>
+            <h5 class="mt-2 text-primary">FOR THE MONTH OF - {{ getMonthName(selectedMonth) | uppercase }} {{
+                selectedYear }}</h5>
+        </div>
+        <div class="card-body p-0">
+            <div class="table-responsive">
+                <table class="table table-bordered table-striped table-hover table-sm text-center small align-middle"
+                    style="font-size: 11px;">
+                    <thead class="table-light align-middle">
+                        <tr>
+                            <th rowspan="2">SNO</th>
+                            <th rowspan="2">NAME</th>
+                            <th rowspan="2">ROOM<br>NO</th>
+                            <th rowspan="2">DATE OF<br>ALLOTMENT</th>
+                            <th rowspan="2">CURRENT<br>ALLOTMENT</th>
+                            <th rowspan="2">ELECTRIC<br>SECURITY</th>
+                            <th rowspan="2">CURRENT<br>ADV</th>
+                            <th rowspan="2">INITIAL<br>RENT</th>
+                            <th rowspan="2">CURRENT<br>RENT</th>
+                            <th colspan="4">ELECTRIC</th>
+                            <th rowspan="2">MISC<br>RENT</th>
+                            <th rowspan="2" title="Brought Forward & Advance">B/F &<br>ADV</th>
+                            <th rowspan="2">TOTAL<br>AMT DUE</th>
+                            <th rowspan="2">AMT<br>PAID</th>
+                            <th rowspan="2" title="Carried Forward or Advance">B/F OR<br>ADV</th>
+                            <th rowspan="2">PAYMENT<br>DATE</th>
+                            <th rowspan="2">REMARKS</th>
+                        </tr>
+                        <tr>
+                            <th>NEW</th>
+                            <th>PRE</th>
+                            <th>TOTAL</th>
+                            <th>COST</th>
+                        </tr>
+                    </thead>
+                    <tbody>
+                        <tr ng-repeat="row in summaryData">
+                            <td>{{ $index + 1 }}</td>
+                            <td class="text-start fw-bold" ng-class="{'text-danger': row.isVacant}">
+                                {{ row.name | uppercase }}
+                            </td>
+                            <td>{{ row.roomNo }}</td>
+                            <td>{{ row.dateOfAllotment | date:'dd-MMM-yy' }}</td>
+                            <td>{{ row.currentAllotment | date:'dd-MMM-yy' }}</td>
+                            <td>{{ row.initialSecurity || 0 | number:0 }}</td>
+                            <td>{{ row.currentAdvance || 0 | number:0 }}</td>
+                            <td>{{ row.initialRent || 0 | number:0 }}</td>
+                            <td>{{ row.currentRent || 0 | number:0 }}</td>
+
+                            <!-- Electric -->
+                            <td>{{ row.meterNew || 0 }}</td>
+                            <td>{{ row.meterPrev || 0 }}</td>
+                            <td>{{ (row.meterNew - row.meterPrev) > 0 ? (row.meterNew - row.meterPrev) : 0 }}</td>
+                            <td>{{ row.electricCost | number:0 }}</td>
+
+                            <td>{{ row.miscRent || 0 | number:0 }}</td>
+
+                            <!-- Financials -->
+                            <td class="fw-bold text-danger">{{ row.balanceForward | number:0 }}</td>
+                            <td class="fw-bold">{{ ((row.currentRent || 0) + (row.electricCost || 0) + (row.miscRent ||
+                                0) + (row.balanceForward || 0)) | number:0 }}</td>
+                            <td class="text-success fw-bold">{{ row.amountPaid | number:0 }}</td>
+                            <td class="fw-bold"
+                                ng-class="{'text-danger': row.carryForward > 0, 'text-success': row.carryForward < 0}">
+                                {{ row.carryForward | number:0 }}
+                            </td>
+
+                            <td>{{ row.paymentDate | date:'dd-MMM' }}</td>
+                            <td class="text-start small text-muted fst-italic">{{ row.remarks }}</td>
+                        </tr>
+
+                        <!-- Totals Row -->
+                        <tr class="table-secondary fw-bold">
+                            <td colspan="5">TOTAL</td>
+                            <td>{{ getTotal('initialSecurity') | number:0 }}</td>
+                            <td>{{ getTotal('currentAdvance') | number:0 }}</td>
+                            <td>{{ getTotal('initialRent') | number:0 }}</td>
+                            <td>{{ getTotal('currentRent') | number:0 }}</td>
+                            <td></td>
+                            <td></td>
+                            <td>{{ getTotalUnits() }}</td>
+                            <td>{{ getTotal('electricCost') | number:0 }}</td>
+                            <td>{{ getTotal('miscRent') | number:0 }}</td>
+                            <td>{{ getTotal('balanceForward') | number:0 }}</td>
+                            <td>{{ getGrandTotalDue() | number:0 }}</td>
+                            <td>{{ getTotal('amountPaid') | number:0 }}</td>
+                            <td>{{ getTotal('carryForward') | number:0 }}</td>
+                            <td></td>
+                            <td></td>
+                        </tr>
+                    </tbody>
+                </table>
+            </div>
+        </div>
+    </div>
+</div>
+
+<style>
+    @media print {
+        @page {
+            size: landscape;
+            margin: 5mm;
+        }
+
+        .d-print-none {
+            display: none !important;
+        }
+
+        .card {
+            border: none !important;
+        }
+
+        .table {
+            font-size: 9px !important;
+        }
+
+        .card-header {
+            border-bottom: 2px solid #000 !important;
+        }
+    }
+</style>

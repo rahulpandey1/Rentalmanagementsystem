@@ -1,0 +1,311 @@
+@{
+    ViewData["Title"] = "Billing Summary";
+    var summary = ViewBag.BillingSummary;
+}
+
+<div class="row">
+    <div class="col-12">
+        <h1><i class="fas fa-chart-pie"></i> Billing Summary & Outstanding Report</h1>
+        <p class="lead">Overview of all outstanding bills, rent dues, and advance payments</p>
+    </div>
+</div>
+
+<!-- Summary Cards -->
+<div class="row">
+    <div class="col-md-2">
+        <div class="card bg-danger text-white">
+            <div class="card-body text-center">
+                <h4>$@summary.TotalOutstanding.ToString("N2")</h4>
+                <p class="mb-0">Total Outstanding</p>
+            </div>
+        </div>
+    </div>
+    <div class="col-md-2">
+        <div class="card bg-warning text-white">
+            <div class="card-body text-center">
+                <h4>$@summary.TotalRentDue.ToString("N2")</h4>
+                <p class="mb-0">Rent Due</p>
+            </div>
+        </div>
+    </div>
+    <div class="col-md-2">
+        <div class="card bg-info text-white">
+            <div class="card-body text-center">
+                <h4>$@summary.TotalElectricDue.ToString("N2")</h4>
+                <p class="mb-0">Electric Due</p>
+            </div>
+        </div>
+    </div>
+    <div class="col-md-2">
+        <div class="card bg-secondary text-white">
+            <div class="card-body text-center">
+                <h4>$@summary.TotalMiscDue.ToString("N2")</h4>
+                <p class="mb-0">Misc Due</p>
+            </div>
+        </div>
+    </div>
+    <div class="col-md-2">
+        <div class="card bg-success text-white">
+            <div class="card-body text-center">
+                <h4>$@summary.TotalAdvance.ToString("N2")</h4>
+                <p class="mb-0">Total Advance</p>
+            </div>
+        </div>
+    </div>
+    <div class="col-md-2">
+        <div class="card bg-dark text-white">
+            <div class="card-body text-center">
+                <h4>@summary.OverdueBills</h4>
+                <p class="mb-0">Overdue Bills</p>
+            </div>
+        </div>
+    </div>
+</div>
+
+<!-- Outstanding by Tenant -->
+<div class="row mt-4">
+    <div class="col-md-8">
+        <div class="card">
+            <div class="card-header">
+                <h5><i class="fas fa-users"></i> Outstanding by Tenant</h5>
+            </div>
+            <div class="card-body">
+                @{
+                    var outstandingList = summary.OutstandingByTenant as IEnumerable<dynamic>;
+                    var hasOutstanding = outstandingList != null && outstandingList.Any();
+                }
+                
+                @if (hasOutstanding)
+                {
+                    <div class="table-responsive">
+                        <table class="table table-striped">
+                            <thead>
+                                <tr>
+                                    <th>Tenant</th>
+                                    <th>Room</th>
+                                    <th>Outstanding Amount</th>
+                                    <th>Bill Count</th>
+                                    <th>Action</th>
+                                </tr>
+                            </thead>
+                            <tbody>
+                                @foreach (var item in outstandingList)
+                                {
+                                    <tr>
+                                        <td>@item.TenantName</td>
+                                        <td><span class="badge bg-primary">@item.RoomNumber</span></td>
+                                        <td><strong class="text-danger">$@item.TotalOutstanding.ToString("N2")</strong></td>
+                                        <td>@item.BillCount bill(s)</td>
+                                        <td>
+                                            <button class="btn btn-sm btn-outline-primary" onclick="viewTenantBills(@item.TenantId)">
+                                                <i class="fas fa-eye"></i> View Bills
+                                            </button>
+                                        </td>
+                                    </tr>
+                                }
+                            </tbody>
+                        </table>
+                    </div>
+                }
+                else
+                {
+                    <div class="text-center text-muted">
+                        <i class="fas fa-check-circle fa-3x"></i>
+                        <p class="mt-2">No outstanding bills!</p>
+                    </div>
+                }
+            </div>
+        </div>
+    </div>
+    
+    <div class="col-md-4">
+        <div class="card">
+            <div class="card-header">
+                <h5><i class="fas fa-chart-bar"></i> Quick Stats</h5>
+            </div>
+            <div class="card-body">
+                @{
+                    var outstandingCount = hasOutstanding ? outstandingList.Count() : 0;
+                    var avgOutstanding = outstandingCount > 0 ? (summary.TotalOutstanding / outstandingCount) : 0;
+                    var maxOutstanding = hasOutstanding ? outstandingList.Max(x => x.TotalOutstanding) : 0;
+                }
+                
+                <div class="row">
+                    <div class="col-12 mb-3">
+                        <div class="d-flex justify-content-between">
+                            <span>Tenants with Outstanding:</span>
+                            <strong>@outstandingCount</strong>
+                        </div>
+                    </div>
+                    <div class="col-12 mb-3">
+                        <div class="d-flex justify-content-between">
+                            <span>Average Outstanding:</span>
+                            <strong>$@avgOutstanding.ToString("N2")</strong>
+                        </div>
+                    </div>
+                    <div class="col-12 mb-3">
+                        <div class="d-flex justify-content-between">
+                            <span>Highest Outstanding:</span>
+                            <strong class="text-danger">$@maxOutstanding.ToString("N2")</strong>
+                        </div>
+                    </div>
+                </div>
+                
+                <hr>
+                
+                <div class="row">
+                    <div class="col-12">
+                        <button class="btn btn-primary w-100 mb-2" onclick="generateBulkBills()">
+                            <i class="fas fa-file-invoice"></i> Generate Monthly Bills
+                        </button>
+                        <button class="btn btn-success w-100 mb-2" onclick="recordBulkPayments()">
+                            <i class="fas fa-money-bill"></i> Record Payments
+                        </button>
+                        <button class="btn btn-info w-100" onclick="exportReport()">
+                            <i class="fas fa-download"></i> Export Report
+                        </button>
+                    </div>
+                </div>
+            </div>
+        </div>
+    </div>
+</div>
+
+<!-- Recent Bills -->
+<div class="row mt-4">
+    <div class="col-12">
+        <div class="card">
+            <div class="card-header d-flex justify-content-between align-items-center">
+                <h5><i class="fas fa-file-invoice"></i> Recent Bills</h5>
+                <a href="/Dashboard/Bills" class="btn btn-primary btn-sm">
+                    <i class="fas fa-plus"></i> Generate New Bill
+                </a>
+            </div>
+            <div class="card-body">
+                @{
+                    var recentBillsList = summary.RecentBills as IEnumerable<dynamic>;
+                    var hasRecentBills = recentBillsList != null && recentBillsList.Any();
+                }
+                
+                @if (hasRecentBills)
+                {
+                    <div class="table-responsive">
+                        <table class="table table-striped">
+                            <thead>
+                                <tr>
+                                    <th>Bill Number</th>
+                                    <th>Tenant</th>
+                                    <th>Room</th>
+                                    <th>Bill Date</th>
+                                    <th>Total Amount</th>
+                                    <th>Outstanding</th>
+                                    <th>Status</th>
+                                    <th>Actions</th>
+                                </tr>
+                            </thead>
+                            <tbody>
+                                @foreach (var bill in recentBillsList)
+                                {
+                                    <tr>
+                                        <td><strong>@bill.BillNumber</strong></td>
+                                        <td>@bill.Tenant.FullName</td>
+                                        <td><span class="badge bg-secondary">@bill.Room?.RoomNumber</span></td>
+                                        <td>@bill.BillDate.ToString("MMM dd, yyyy")</td>
+                                        <td>$@bill.TotalAmount.ToString("N2")</td>
+                                        <td>
+                                            @if (bill.OutstandingAmount > 0)
+                                            {
+                                                <span class="text-danger">$@bill.OutstandingAmount.ToString("N2")</span>
+                                            }
+                                            else
+                                            {
+                                                <span class="text-success">$0.00</span>
+                                            }
+                                        </td>
+                                        <td>
+                                            @switch (bill.Status)
+                                            {
+                                                case "Paid":
+                                                    <span class="badge bg-success">Paid</span>
+                                                    break;
+                                                case "Partial":
+                                                    <span class="badge bg-warning">Partial</span>
+                                                    break;
+                                                case "Overdue":
+                                                    <span class="badge bg-danger">Overdue</span>
+                                                    break;
+                                                default:
+                                                    <span class="badge bg-secondary">Pending</span>
+                                                    break;
+                                            }
+                                        </td>
+                                        <td>
+                                            <div class="btn-group" role="group">
+                                                <button class="btn btn-sm btn-outline-info" onclick="viewBill(@bill.Id)">
+                                                    <i class="fas fa-eye"></i>
+                                                </button>
+                                                <button class="btn btn-sm btn-outline-success" onclick="recordPayment(@bill.Id)">
+                                                    <i class="fas fa-money-bill"></i>
+                                                </button>
+                                            </div>
+                                        </td>
+                                    </tr>
+                                }
+                            </tbody>
+                        </table>
+                    </div>
+                }
+                else
+                {
+                    <div class="text-center text-muted">
+                        <i class="fas fa-file-invoice fa-3x"></i>
+                        <p class="mt-2">No bills generated yet</p>
+                    </div>
+                }
+            </div>
+        </div>
+    </div>
+</div>
+
+@section Scripts {
+<script>
+    function viewTenantBills(tenantId) {
+        // Navigate to tenant bills view
+        window.location.href = `/api/bills/tenant/${tenantId}`;
+    }
+    
+    function viewBill(billId) {
+        // Navigate to bill details
+        window.location.href = `/api/bills/${billId}`;
+    }
+    
+    function recordPayment(billId) {
+        // Open payment recording modal or navigate to payment page
+        alert('Record payment functionality - to be implemented');
+    }
+    
+    function generateBulkBills() {
+        alert('Bulk bill generation functionality - to be implemented');
+    }
+    
+    function recordBulkPayments() {
+        alert('Bulk payment recording functionality - to be implemented');
+    }
+    
+    function exportReport() {
+        alert('Export report functionality - to be implemented');
+    }
+</script>
+}
+
+<style>
+    .card {
+        box-shadow: 0 0.125rem 0.25rem rgba(0, 0, 0, 0.075);
+        border: 1px solid rgba(0, 0, 0, 0.125);
+    }
+    
+    .table th {
+        background-color: #f8f9fa;
+        font-weight: 600;
+    }
+</style>

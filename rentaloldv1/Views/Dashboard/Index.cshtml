@@ -1,0 +1,266 @@
+@{
+    ViewData["Title"] = "Dashboard";
+    var dashboardData = ViewBag.DashboardData;
+}
+
+<div class="row">
+    <div class="col-12">
+        <h1><i class="fas fa-tachometer-alt"></i> Sita Devi Pandey and Sons - Management Dashboard</h1>
+        <p class="lead">Welcome to your 22-room boarding house management system</p>
+    </div>
+</div>
+
+<!-- Room Statistics -->
+<div class="row">
+    <div class="col-md-2">
+        <div class="card bg-primary text-white">
+            <div class="card-body">
+                <div class="d-flex justify-content-between">
+                    <div>
+                        <h3>@dashboardData.TotalRooms</h3>
+                        <p>Total Rooms</p>
+                    </div>
+                    <div class="align-self-center">
+                        <i class="fas fa-bed fa-2x"></i>
+                    </div>
+                </div>
+            </div>
+        </div>
+    </div>
+    
+    <div class="col-md-2">
+        <div class="card bg-success text-white">
+            <div class="card-body">
+                <div class="d-flex justify-content-between">
+                    <div>
+                        <h3>@dashboardData.AvailableRooms</h3>
+                        <p>Available Rooms</p>
+                    </div>
+                    <div class="align-self-center">
+                        <i class="fas fa-check-circle fa-2x"></i>
+                    </div>
+                </div>
+            </div>
+        </div>
+    </div>
+    
+    <div class="col-md-2">
+        <div class="card bg-warning text-white">
+            <div class="card-body">
+                <div class="d-flex justify-content-between">
+                    <div>
+                        <h3>@dashboardData.OccupiedRooms</h3>
+                        <p>Occupied Rooms</p>
+                    </div>
+                    <div class="align-self-center">
+                        <i class="fas fa-user-check fa-2x"></i>
+                    </div>
+                </div>
+            </div>
+        </div>
+    </div>
+    
+    <div class="col-md-2">
+        <div class="card bg-info text-white">
+            <div class="card-body">
+                <div class="d-flex justify-content-between">
+                    <div>
+                        <h3>@dashboardData.TotalTenants</h3>
+                        <p>Total Tenants</p>
+                    </div>
+                    <div class="align-self-center">
+                        <i class="fas fa-users fa-2x"></i>
+                    </div>
+                </div>
+            </div>
+        </div>
+    </div>
+    
+    <div class="col-md-2">
+        <div class="card bg-danger text-white">
+            <div class="card-body">
+                <div class="d-flex justify-content-between">
+                    <div>
+                        <h3>@dashboardData.OverdueBills</h3>
+                        <p>Overdue Bills</p>
+                    </div>
+                    <div class="align-self-center">
+                        <i class="fas fa-exclamation-triangle fa-2x"></i>
+                    </div>
+                </div>
+            </div>
+        </div>
+    </div>
+    
+    <div class="col-md-2">
+        <div class="card bg-dark text-white">
+            <div class="card-body">
+                <div class="d-flex justify-content-between">
+                    <div>
+                        <h3>?@dashboardData.TotalRevenue?.ToString("N0")</h3>
+                        <p>Total Revenue</p>
+                    </div>
+                    <div class="align-self-center">
+                        <i class="fas fa-rupee-sign fa-2x"></i>
+                    </div>
+                </div>
+            </div>
+        </div>
+    </div>
+</div>
+
+<!-- Financial Summary -->
+<div class="row mt-4">
+    <div class="col-md-3">
+        <div class="card border-danger">
+            <div class="card-header bg-danger text-white">
+                <h6><i class="fas fa-file-invoice-dollar"></i> Total Outstanding</h6>
+            </div>
+            <div class="card-body text-center">
+                <h4 class="text-danger">?@dashboardData.TotalOutstanding?.ToString("N2")</h4>
+                <small>All unpaid bills</small>
+            </div>
+        </div>
+    </div>
+    
+    <div class="col-md-3">
+        <div class="card border-warning">
+            <div class="card-header bg-warning text-white">
+                <h6><i class="fas fa-home"></i> Rent Due</h6>
+            </div>
+            <div class="card-body text-center">
+                <h4 class="text-warning">?@dashboardData.TotalRentDue?.ToString("N2")</h4>
+                <small>Unpaid rent</small>
+            </div>
+        </div>
+    </div>
+    
+    <div class="col-md-3">
+        <div class="card border-info">
+            <div class="card-header bg-info text-white">
+                <h6><i class="fas fa-bolt"></i> Electric Due</h6>
+            </div>
+            <div class="card-body text-center">
+                <h4 class="text-info">?@dashboardData.TotalElectricDue?.ToString("N2")</h4>
+                <small>Unpaid electric bills</small>
+            </div>
+        </div>
+    </div>
+    
+    <div class="col-md-3">
+        <div class="card border-success">
+            <div class="card-header bg-success text-white">
+                <h6><i class="fas fa-piggy-bank"></i> Total Advance</h6>
+            </div>
+            <div class="card-body text-center">
+                <h4 class="text-success">?@dashboardData.TotalAdvance?.ToString("N2")</h4>
+                <small>Advance payments</small>
+            </div>
+        </div>
+    </div>
+</div>
+
+<!-- Floor Occupancy Summary -->
+<div class="row mt-4">
+    <div class="col-md-4">
+        <div class="card">
+            <div class="card-header bg-secondary text-white">
+                <h6><i class="fas fa-layer-group"></i> Ground Floor (G/1 to G/10)</h6>
+            </div>
+            <div class="card-body">
+                <div class="progress mb-2">
+                    <div class="progress-bar bg-success" style="width: @((double)dashboardData.GroundFloorOccupied / dashboardData.GroundFloorTotal * 100)%">
+                        @dashboardData.GroundFloorOccupied/@dashboardData.GroundFloorTotal
+                    </div>
+                </div>
+                <small>@((double)dashboardData.GroundFloorOccupied / dashboardData.GroundFloorTotal * 100).ToString("F1")% Occupied</small>
+            </div>
+        </div>
+    </div>
+    
+    <div class="col-md-4">
+        <div class="card">
+            <div class="card-header bg-primary text-white">
+                <h6><i class="fas fa-layer-group"></i> First Floor (1/1 to 1/6)</h6>
+            </div>
+            <div class="card-body">
+                <div class="progress mb-2">
+                    <div class="progress-bar bg-info" style="width: @((double)dashboardData.FirstFloorOccupied / dashboardData.FirstFloorTotal * 100)%">
+                        @dashboardData.FirstFloorOccupied/@dashboardData.FirstFloorTotal
+                    </div>
+                </div>
+                <small>@((double)dashboardData.FirstFloorOccupied / dashboardData.FirstFloorTotal * 100).ToString("F1")% Occupied</small>
+            </div>
+        </div>
+    </div>
+    
+    <div class="col-md-4">
+        <div class="card">
+            <div class="card-header bg-warning text-white">
+                <h6><i class="fas fa-layer-group"></i> Second Floor (2/1 to 2/6)</h6>
+            </div>
+            <div class="card-body">
+                <div class="progress mb-2">
+                    <div class="progress-bar bg-warning" style="width: @((double)dashboardData.SecondFloorOccupied / dashboardData.SecondFloorTotal * 100)%">
+                        @dashboardData.SecondFloorOccupied/@dashboardData.SecondFloorTotal
+                    </div>
+                </div>
+                <small>@((double)dashboardData.SecondFloorOccupied / dashboardData.SecondFloorTotal * 100).ToString("F1")% Occupied</small>
+            </div>
+        </div>
+    </div>
+</div>
+
+<div class="row mt-4">
+    <div class="col-12">
+        <div class="card">
+            <div class="card-header">
+                <h5><i class="fas fa-chart-line"></i> Quick Actions</h5>
+            </div>
+            <div class="card-body">
+                <div class="row">
+                    <div class="col-md-2">
+                        <a href="/Dashboard/DataImport" class="btn btn-primary btn-lg w-100 mb-3">
+                            <i class="fas fa-file-excel"></i><br>
+                            Import Excel Data
+                        </a>
+                    </div>
+                    <div class="col-md-2">
+                        <a href="/Dashboard/Rooms" class="btn btn-secondary btn-lg w-100 mb-3">
+                            <i class="fas fa-bed"></i><br>
+                            Manage Rooms
+                        </a>
+                    </div>
+                    <div class="col-md-2">
+                        <a href="/Dashboard/Bills" class="btn btn-danger btn-lg w-100 mb-3">
+                            <i class="fas fa-file-invoice-dollar"></i><br>
+                            Bills & Invoices
+                        </a>
+                    </div>
+                    <div class="col-md-2">
+                        <a href="/Dashboard/ElectricMeter" class="btn btn-info btn-lg w-100 mb-3">
+                            <i class="fas fa-bolt"></i><br>
+                            Electric Meter
+                        </a>
+                    </div>
+                    <div class="col-md-2">
+                        <a href="/Dashboard/Tenants" class="btn btn-success btn-lg w-100 mb-3">
+                            <i class="fas fa-users"></i><br>
+                            Manage Tenants
+                        </a>
+                    </div>
+                    <div class="col-md-2">
+                        <a href="/Dashboard/BillingSummary" class="btn btn-outline-primary btn-lg w-100 mb-3">
+                            <i class="fas fa-chart-pie"></i><br>
+                            Billing Summary
+                        </a>
+                    </div>
+                </div>
+            </div>
+        </div>
+    </div>
+</div>
+
+<div class="row mt-4">
+    <div class="col-12">
+        <div class="card

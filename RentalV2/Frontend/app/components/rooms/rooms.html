@@ -1,0 +1,310 @@
+<div class="container-fluid">
+    <div ng-if="loading" class="loader-overlay">
+        <div class="spinner-border text-primary" role="status">
+            <span class="visually-hidden">Loading...</span>
+        </div>
+    </div>
+
+    <div class="d-flex justify-content-between align-items-center mb-4">
+        <h2>Room Management</h2>
+        <select class="form-select w-auto" ng-model="filterFloor">
+            <option value="">All Floors</option>
+            <option value="0">Ground Floor</option>
+            <option value="1">First Floor</option>
+            <option value="2">Second Floor</option>
+        </select>
+    </div>
+
+    <!-- Summary Cards -->
+    <div class="row mb-4">
+        <div class="col-md-3">
+            <div class="card bg-soft-primary mb-3">
+                <div class="card-body text-center">
+                    <h4>{{ rooms.length }}</h4>
+                    <small>Total Rooms</small>
+                </div>
+            </div>
+        </div>
+        <div class="col-md-3">
+            <div class="card bg-soft-success mb-3">
+                <div class="card-body text-center">
+                    <h4>{{ availableCount }}</h4>
+                    <small>Available</small>
+                </div>
+            </div>
+        </div>
+        <div class="col-md-3">
+            <div class="card bg-soft-danger mb-3">
+                <div class="card-body text-center">
+                    <h4>{{ occupiedCount }}</h4>
+                    <small>Occupied</small>
+                </div>
+            </div>
+        </div>
+        <div class="col-md-3">
+            <div class="card bg-soft-info mb-3">
+                <div class="card-body text-center">
+                    <h4>{{ unassignedTenants.length }}</h4>
+                    <small>Tenants in Queue</small>
+                </div>
+            </div>
+        </div>
+    </div>
+
+    <div class="row g-4">
+        <div class="col-md-4 col-lg-3" ng-repeat="room in rooms | filter:filterRooms">
+            <div class="card h-100 shadow-sm"
+                ng-class="{'border-soft-success': room.isAvailable, 'border-soft-danger': !room.isAvailable}"
+                style="border: 1px solid;">
+                <div class="card-header room-card-header d-flex justify-content-between align-items-center"
+                    ng-class="{'bg-soft-success': room.isAvailable, 'bg-soft-danger': !room.isAvailable}">
+                    <h5 class="mb-0">{{ room.roomNumber }}</h5>
+                    <span class="badge" ng-class="{'bg-success': room.isAvailable, 'bg-danger': !room.isAvailable}">{{
+                        room.isAvailable ? 'Available' : 'Occupied' }}</span>
+                </div>
+                <div class="card-body">
+                    <div class="d-flex justify-content-between">
+                        <span>Rent:</span>
+                        <strong>₹{{ room.monthlyRent | number }}</strong>
+                    </div>
+
+                    <!-- Tenant Info -->
+                    <div ng-if="room.currentTenant" class="mt-2 p-2 bg-light rounded">
+                        <div><i class="fas fa-user text-soft-primary"></i> <strong>{{ room.currentTenant.name
+                                }}</strong>
+                        </div>
+                        <small class="text-muted">Since: {{ room.currentTenant.since | date:'MMM yyyy' }}</small>
+                        <div ng-if="room.currentTenant.securityDeposit">
+                            <small>Security: ₹{{ room.currentTenant.securityDeposit | number }}</small>
+                        </div>
+                    </div>
+
+                    <!-- Meter Info -->
+                    <div class="mt-2 p-2 border rounded small"
+                        ng-if="room.electricMeterNumber || room.lastMeterReading">
+                        <div><i class="fas fa-bolt text-soft-warning"></i> <strong>Meter:</strong> {{
+                            room.electricMeterNumber || 'N/A' }}</div>
+                        <div ng-if="room.lastMeterReading">
+                            Last Reading: {{ room.lastMeterReading }}
+                            <small class="text-muted">({{ room.lastReadingDate | date:'dd/MM/yy' }})</small>
+                        </div>
+                    </div>
+
+                    <!-- Actions -->
+                    <div class="mt-3">
+                        <button class="btn btn-sm btn-soft-primary w-100 mb-1" ng-click="viewRoomDetails(room)">
+                            <i class="fas fa-eye"></i> Details
+                        </button>
+                        <button class="btn btn-sm btn-soft-warning w-100 mb-1" ng-click="openMeterReading(room)">
+                            <i class="fas fa-bolt"></i> Meter Reading
+                        </button>
+                        <button class="btn btn-sm btn-soft-success w-100"
+                            ng-if="room.isAvailable && unassignedTenants.length > 0" ng-click="openAssignTenant(room)">
+                            <i class="fas fa-user-plus"></i> Assign Tenant
+                        </button>
+                        <div ng-if="!room.isAvailable" class="d-flex gap-1">
+                            <button class="btn btn-sm btn-soft-warning w-50" ng-click="openRenewModal(room)"
+                                title="Renew Agreement / Hike Rent">
+                                <i class="fas fa-sync-alt"></i> Renew
+                            </button>
+                            <button class="btn btn-sm btn-soft-danger w-50" ng-click="vacateRoom(room)"
+                                title="Vacate Room">
+                                <i class="fas fa-sign-out-alt"></i> Vacate
+                            </button>
+                        </div>
+                    </div>
+                </div>
+            </div>
+        </div>
+    </div>
+
+    <!-- Assign Tenant Modal -->
+    <div class="modal fade" id="assignTenantModal" tabindex="-1" aria-hidden="true">
+        <div class="modal-dialog">
+            <div class="modal-content">
+                <div class="modal-header bg-soft-success">
+                    <h5 class="modal-title"><i class="fas fa-user-plus"></i> Assign Tenant to {{ selectedRoom.roomNumber
+                        }}</h5>
+                    <button type="button" class="btn-close" data-bs-dismiss="modal"></button>
+                </div>
+                <div class="modal-body">
+                    <form ng-submit="confirmAssign()">
+                        <div class="mb-3">
+                            <label class="form-label">Select Tenant *</label>
+                            <select class="form-select" ng-model="assignment.tenantId" required>
+                                <option value="">-- Select from Queue --</option>
+                                <option ng-repeat="tenant in unassignedTenants" value="{{tenant.id}}">
+                                    {{ tenant.firstName }} {{ tenant.lastName }}
+                                    <span ng-if="tenant.phoneNumber">({{ tenant.phoneNumber }})</span>
+                                </option>
+                            </select>
+                        </div>
+                        <div class="mb-3">
+                            <label class="form-label">Monthly Rent (₹)</label>
+                            <input type="number" class="form-control" ng-model="assignment.monthlyRent">
+                        </div>
+                        <div class="mb-3">
+                            <label class="form-label">Security Deposit (₹)</label>
+                            <input type="number" class="form-control" ng-model="assignment.securityDeposit">
+                        </div>
+                        <div class="mb-3">
+                            <label class="form-label">Start Date</label>
+                            <input type="date" class="form-control" ng-model="assignment.startDate">
+                        </div>
+                        <div class="text-end">
+                            <button type="button" class="btn btn-secondary" data-bs-dismiss="modal">Cancel</button>
+                            <button type="submit" class="btn btn-success">
+                                <i class="fas fa-check"></i> Assign
+                            </button>
+                        </div>
+                    </form>
+                </div>
+            </div>
+        </div>
+    </div>
+
+    <!-- Meter Reading Modal -->
+    <div class="modal fade" id="meterReadingModal" tabindex="-1" aria-hidden="true">
+        <div class="modal-dialog">
+            <div class="modal-content">
+                <div class="modal-header bg-soft-warning">
+                    <h5 class="modal-title"><i class="fas fa-bolt"></i> Meter Reading - {{ selectedRoom.roomNumber }}
+                    </h5>
+                    <button type="button" class="btn-close" data-bs-dismiss="modal"></button>
+                </div>
+                <div class="modal-body">
+                    <form ng-submit="saveMeterReading()">
+                        <div class="mb-3">
+                            <label class="form-label">Meter Number</label>
+                            <input type="text" class="form-control" ng-model="meterData.meterNumber"
+                                placeholder="e.g. MTR-G1">
+                        </div>
+                        <div class="mb-3">
+                            <label class="form-label">Previous Reading</label>
+                            <input type="number" class="form-control" ng-model="meterData.previousReading" readonly>
+                        </div>
+                        <div class="mb-3">
+                            <label class="form-label">Current Reading *</label>
+                            <input type="number" class="form-control" ng-model="meterData.currentReading"
+                                ng-change="calculateUnits()" required>
+                        </div>
+                        <div class="mb-3">
+                            <label class="form-label">Units Consumed</label>
+                            <input type="text" class="form-control" readonly
+                                value="{{ meterData.unitsConsumed || 0 }} units">
+                        </div>
+                        <div class="text-end">
+                            <button type="button" class="btn btn-secondary" data-bs-dismiss="modal">Cancel</button>
+                            <button type="submit" class="btn btn-warning">
+                                <i class="fas fa-save"></i> Save Reading
+                            </button>
+                        </div>
+                    </form>
+                </div>
+            </div>
+        </div>
+    </div>
+
+    <!-- Room Details Modal -->
+    <div class="modal fade" id="roomDetailsModal" tabindex="-1" aria-hidden="true">
+        <div class="modal-dialog modal-lg">
+            <div class="modal-content">
+                <div class="modal-header">
+                    <h5 class="modal-title">Room Details: {{ roomDetails.roomNumber }}</h5>
+                    <button type="button" class="btn-close" data-bs-dismiss="modal"></button>
+                </div>
+                <div class="modal-body">
+                    <div class="row">
+                        <div class="col-md-6">
+                            <h6>Basic Info</h6>
+                            <p><strong>Floor:</strong> {{ roomDetails.floorNumber }}</p>
+                            <p><strong>Rent:</strong> ₹{{ roomDetails.monthlyRent | number }}</p>
+                            <p><strong>Status:</strong>
+                                <span class="badge"
+                                    ng-class="{'bg-success': roomDetails.isAvailable, 'bg-danger': !roomDetails.isAvailable}">
+                                    {{ roomDetails.isAvailable ? 'Available' : 'Occupied' }}
+                                </span>
+                            </p>
+                        </div>
+                        <div class="col-md-6" ng-if="roomDetails.currentTenant">
+                            <h6>Current Tenant</h6>
+                            <p><strong>Name:</strong> {{ roomDetails.currentTenant.name }}</p>
+                            <p><strong>Phone:</strong> {{ roomDetails.currentTenant.phone || 'N/A' }}</p>
+                            <p><strong>Since:</strong> {{ roomDetails.currentTenant.since | date:'dd MMM yyyy' }}</p>
+                            <p><strong>Security:</strong> ₹{{ roomDetails.currentTenant.securityDeposit | number }}</p>
+                        </div>
+                    </div>
+                    <hr>
+                    <h6>Meter Reading History</h6>
+                    <table class="table table-sm"
+                        ng-if="roomDetails.meterReadingHistory && roomDetails.meterReadingHistory.length > 0">
+                        <thead>
+                            <tr>
+                                <th>Date</th>
+                                <th>Previous</th>
+                                <th>Current</th>
+                                <th>Units</th>
+                                <th>Charges</th>
+                            </tr>
+                        </thead>
+                        <tbody>
+                            <tr ng-repeat="reading in roomDetails.meterReadingHistory">
+                                <td>{{ reading.readingDate | date:'dd MMM yyyy' }}</td>
+                                <td>{{ reading.previousReading }}</td>
+                                <td>{{ reading.currentReading }}</td>
+                                <td>{{ reading.unitsConsumed }}</td>
+                                <td>₹{{ reading.electricCharges | number }}</td>
+                            </tr>
+                        </tbody>
+                    </table>
+                    <p ng-if="!roomDetails.meterReadingHistory || roomDetails.meterReadingHistory.length === 0"
+                        class="text-muted">
+                        No meter reading history.
+                    </p>
+                </div>
+            </div>
+        </div>
+    </div>
+
+    <!-- Renew Agreement Modal -->
+    <div class="modal fade" id="renewModal" tabindex="-1" aria-hidden="true">
+        <div class="modal-dialog">
+            <div class="modal-content">
+                <div class="modal-header bg-soft-warning">
+                    <h5 class="modal-title"><i class="fas fa-sync-alt"></i> Renew / Hike Rent - {{
+                        selectedRoom.roomNumber }}</h5>
+                    <button type="button" class="btn-close" data-bs-dismiss="modal"></button>
+                </div>
+                <div class="modal-body">
+                    <div class="alert alert-info small">
+                        This will end the current agreement and start a new one with the updated rent. History will be
+                        preserved.
+                    </div>
+                    <form ng-submit="renewAgreement()">
+                        <div class="mb-3">
+                            <label class="form-label">Current Tenant</label>
+                            <input type="text" class="form-control" readonly
+                                value="{{ selectedRoom.currentTenant.name }}">
+                        </div>
+                        <div class="mb-3">
+                            <label class="form-label">New Monthly Rent (₹)</label>
+                            <input type="number" class="form-control" ng-model="renewData.monthlyRent" required>
+                            <small class="text-muted">Current Rent: ₹{{ selectedRoom.monthlyRent }}</small>
+                        </div>
+                        <div class="mb-3">
+                            <label class="form-label">Start Date</label>
+                            <input type="date" class="form-control" ng-model="renewData.startDate" required>
+                        </div>
+                        <div class="text-end">
+                            <button type="button" class="btn btn-secondary" data-bs-dismiss="modal">Cancel</button>
+                            <button type="submit" class="btn btn-warning">
+                                <i class="fas fa-check"></i> Confirm Renewal
+                            </button>
+                        </div>
+                    </form>
+                </div>
+            </div>
+        </div>
+    </div>
+
+</div>

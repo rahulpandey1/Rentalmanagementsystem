@@ -1,0 +1,31 @@
+{
+  "property": {
+    "name": "Sita Devi Pandey and Sons Housing Project",
+    "address": "11/1B/1 GANPAT RAI KHEMKA LANE LILUAH HOWRAH(W. B.) 711204",
+    "totalFloors": 3
+  },
+  "rooms": [
+    { "number": "G/1", "floor": 0, "currentTenant": "AKHILESH RAI", "rent": 1900, "advance": 5000, "allotDate": "2025-05-01", "occupied": true },
+    { "number": "G/2", "floor": 0, "currentTenant": "LAXMI SHARMA", "rent": 1900, "advance": 0, "allotDate": "2025-06-01", "occupied": true },
+    { "number": "G/3", "floor": 0, "currentTenant": "PANKAJ PATEL", "rent": 2200, "advance": 5000, "allotDate": "2021-07-01", "occupied": true },
+    { "number": "G/4", "floor": 0, "currentTenant": "BADRI MANDAL", "rent": 2000, "advance": 5000, "allotDate": "2022-12-01", "occupied": true },
+    { "number": "G/5", "floor": 0, "currentTenant": null, "rent": 2000, "advance": 0, "allotDate": null, "occupied": false, "vacantFrom": "2024-07-01" },
+    { "number": "G/6", "floor": 0, "currentTenant": "VIVEK MANDAL", "rent": 2000, "advance": 4000, "allotDate": "2024-06-01", "occupied": true },
+    { "number": "G/7", "floor": 0, "currentTenant": "RAM P SHRESTHA", "rent": 2200, "advance": 10000, "allotDate": "2021-09-01", "occupied": true },
+    { "number": "G/8", "floor": 0, "currentTenant": "AJAY BAG", "rent": 1800, "advance": 10000, "allotDate": "2022-03-01", "occupied": true },
+    { "number": "G/9", "floor": 0, "currentTenant": null, "rent": 2000, "advance": 0, "allotDate": null, "occupied": false, "vacantFrom": "2025-07-01" },
+    { "number": "G/10", "floor": 0, "currentTenant": "PRAMOD MANDAL", "rent": 2000, "advance": 10000, "allotDate": "2022-09-01", "occupied": true },
+    { "number": "1/1", "floor": 1, "currentTenant": null, "rent": 2200, "advance": 0, "allotDate": null, "occupied": false, "vacantFrom": "2024-12-01" },
+    { "number": "1/2", "floor": 1, "currentTenant": null, "rent": 3300, "advance": 0, "allotDate": null, "occupied": false, "vacantFrom": "2025-02-01" },
+    { "number": "1/3", "floor": 1, "currentTenant": null, "rent": 2200, "advance": 0, "allotDate": null, "occupied": false, "vacantFrom": "2024-08-01" },
+    { "number": "1/4", "floor": 1, "currentTenant": null, "rent": 3000, "advance": 0, "allotDate": null, "occupied": false, "vacantFrom": "2025-05-01" },
+    { "number": "1/5", "floor": 1, "currentTenant": null, "rent": 1900, "advance": 0, "allotDate": null, "occupied": false, "vacantFrom": "2023-11-01" },
+    { "number": "1/6", "floor": 1, "currentTenant": "SHAILENDRA PANDEY", "rent": 3000, "advance": 10000, "allotDate": "2024-05-19", "occupied": true },
+    { "number": "2/1", "floor": 2, "currentTenant": "BIRENDAR YADAV", "rent": 2800, "advance": 0, "allotDate": "2007-12-01", "occupied": true },
+    { "number": "2/2", "floor": 2, "currentTenant": "SUNITA SINGH", "rent": 3100, "advance": 15000, "allotDate": "2025-05-01", "occupied": true },
+    { "number": "2/3", "floor": 2, "currentTenant": "SHIV SHANKER PANDEY", "rent": 2800, "advance": 0, "allotDate": "2022-12-01", "occupied": true },
+    { "number": "2/4", "floor": 2, "currentTenant": null, "rent": 2800, "advance": 0, "allotDate": null, "occupied": false, "vacantFrom": "2023-12-01" },
+    { "number": "2/5", "floor": 2, "currentTenant": null, "rent": 2800, "advance": 0, "allotDate": null, "occupied": false, "vacantFrom": "2025-06-01" },
+    { "number": "2/6", "floor": 2, "currentTenant": null, "rent": 3300, "advance": 0, "allotDate": null, "occupied": false, "vacantFrom": "2025-06-01" }
+  ]
+}

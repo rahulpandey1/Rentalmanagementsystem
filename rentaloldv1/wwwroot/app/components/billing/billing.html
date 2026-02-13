@@ -1,0 +1,213 @@
+<div class="container-fluid" ng-hide="printMode">
+    <div ng-if="loading" class="loader-overlay">
+        <div class="spinner-border text-primary" role="status">
+            <span class="visually-hidden">Loading...</span>
+        </div>
+    </div>
+
+    <div class="d-flex justify-content-between align-items-center mb-4">
+        <h2>Billing & Invoices</h2>
+        <button class="btn btn-primary">
+            <i class="fas fa-plus"></i> Generate Bill
+        </button>
+    </div>
+
+    <!-- Outstanding Bills -->
+    <div class="card mb-4 border-danger">
+        <div class="card-header bg-danger text-white">
+            <h5 class="mb-0">Outstanding Bills</h5>
+        </div>
+        <div class="card-body">
+            <div class="table-responsive">
+                <table class="table table-hover">
+                    <thead>
+                        <tr>
+                            <th>Bill #</th>
+                            <th>Tenant</th>
+                            <th>Room</th>
+                            <th>Period</th>
+                            <th>Amount Due</th>
+                            <th>Due Date</th>
+                            <th>Action</th>
+                        </tr>
+                    </thead>
+                    <tbody>
+                        <tr ng-repeat="bill in outstandingBills">
+                            <td>{{ bill.billNumber }}</td>
+                            <td>{{ bill.tenant.firstName }} {{ bill.tenant.lastName }}</td>
+                            <td>{{ bill.room.roomNumber }}</td>
+                            <td>{{ bill.billPeriod }}</td>
+                            <td class="text-danger fw-bold">{{ bill.outstandingAmount | currency:'₹' }}</td>
+                            <td>{{ bill.dueDate | date }}</td>
+                            <td>
+                                <button class="btn btn-sm btn-outline-primary" ng-click="printBill(bill)">
+                                    <i class="fas fa-print"></i> Print
+                                </button>
+                            </td>
+                        </tr>
+                        <tr ng-if="outstandingBills.length === 0">
+                            <td colspan="7" class="text-center">No outstanding bills!</td>
+                        </tr>
+                    </tbody>
+                </table>
+            </div>
+        </div>
+    </div>
+
+    <!-- Recent Bills -->
+    <div class="card">
+        <div class="card-header">
+            <h5 class="mb-0">Recent Bill History</h5>
+        </div>
+        <div class="card-body">
+            <div class="table-responsive">
+                <table class="table">
+                    <thead>
+                        <tr>
+                            <th>Bill #</th>
+                            <th>Tenant</th>
+                            <th>Date</th>
+                            <th>Total</th>
+                            <th>Status</th>
+                            <th>Action</th>
+                        </tr>
+                    </thead>
+                    <tbody>
+                        <tr ng-repeat="bill in bills | limitTo:10">
+                            <td>{{ bill.billNumber }}</td>
+                            <td>{{ bill.tenant.firstName }} {{ bill.tenant.lastName }}</td>
+                            <td>{{ bill.billDate | date }}</td>
+                            <td>{{ bill.totalAmount | currency:'₹' }}</td>
+                            <td>
+                                <span class="badge"
+                                    ng-class="{'bg-success': bill.status === 'Paid', 'bg-warning': bill.status === 'Pending'}">
+                                    {{ bill.status }}
+                                </span>
+                            </td>
+                            <td>
+                                <button class="btn btn-sm btn-outline-secondary" ng-click="printBill(bill)">
+                                    <i class="fas fa-eye"></i> View
+                                </button>
+                            </td>
+                        </tr>
+                    </tbody>
+                </table>
+            </div>
+        </div>
+    </div>
+</div>
+
+<!-- PRINT VIEW (Visible only in Print Mode) -->
+<div class="container bg-white p-5" ng-show="printMode" style="max-width: 210mm; margin: 0 auto;">
+    <div class="d-print-none mb-4">
+        <button class="btn btn-secondary" ng-click="closePrint()"><i class="fas fa-arrow-left"></i> Back</button>
+        <button class="btn btn-primary ms-2" onclick="window.print()"><i class="fas fa-print"></i> Print Now</button>
+    </div>
+
+    <!-- Inline Styles for Print -->
+    <style>
+        @media print {
+            body * {
+                visibility: hidden;
+            }
+
+            .sidebar,
+            .navbar {
+                display: none !important;
+            }
+
+            .container.bg-white,
+            .container.bg-white * {
+                visibility: visible;
+            }
+
+            .container.bg-white {
+                position: absolute;
+                left: 0;
+                top: 0;
+                width: 100%;
+                margin: 0;
+                padding: 20px;
+            }
+
+            .d-print-none {
+                display: none !important;
+            }
+        }
+    </style>
+
+    <div class="text-center mb-5">
+        <h1>INVOICE</h1>
+        <h3>Sita Devi Pandey and Sons</h3>
+        <p>11/1B/1 GANPAT RAI KHEMKA LANE LILUAH HOWRAH(W. B.) 711204</p>
+    </div>
+
+    <div class="row mb-4">
+        <div class="col-6">
+            <h5>Bill To:</h5>
+            <p>
+                <strong>{{ selectedBillForPrint.tenant.firstName }} {{ selectedBillForPrint.tenant.lastName
+                    }}</strong><br>
+                Room: {{ selectedBillForPrint.room.roomNumber }}<br>
+                {{ selectedBillForPrint.tenant.phoneNumber }}
+            </p>
+        </div>
+        <div class="col-6 text-end">
+            <p>
+                <strong>Invoice #:</strong> {{ selectedBillForPrint.billNumber }}<br>
+                <strong>Date:</strong> {{ selectedBillForPrint.billDate | date }}<br>
+                <strong>Due Date:</strong> {{ selectedBillForPrint.dueDate | date }}<br>
+                <strong>Period:</strong> {{ selectedBillForPrint.billPeriod }}
+            </p>
+        </div>
+    </div>
+
+    <table class="table table-bordered border-dark">
+        <thead class="table-light">
+            <tr>
+                <th>Description</th>
+                <th class="text-end">Amount</th>
+            </tr>
+        </thead>
+        <tbody>
+            <tr>
+                <td>Monthly Rent - Room {{ selectedBillForPrint.room.roomNumber }}</td>
+                <td class="text-end">{{ selectedBillForPrint.rentAmount | currency:'₹' }}</td>
+            </tr>
+            <tr ng-if="selectedBillForPrint.electricAmount > 0">
+                <td>Electric Charges
+                    <small class="d-block text-muted">
+                        Reading: {{ selectedBillForPrint.electricMeterReading.previousReading }} to {{
+                        selectedBillForPrint.electricMeterReading.currentReading }}
+                        (Units: {{ selectedBillForPrint.electricMeterReading.currentReading -
+                        selectedBillForPrint.electricMeterReading.previousReading }})
+                    </small>
+                </td>
+                <td class="text-end">{{ selectedBillForPrint.electricAmount | currency:'₹' }}</td>
+            </tr>
+            <tr ng-if="selectedBillForPrint.miscAmount > 0">
+                <td>Miscellaneous Charges</td>
+                <td class="text-end">{{ selectedBillForPrint.miscAmount | currency:'₹' }}</td>
+            </tr>
+            <tr ng-repeat="item in selectedBillForPrint.billItems">
+                <td>{{ item.description }}</td>
+                <td class="text-end">{{ item.amount | currency:'₹' }}</td>
+            </tr>
+        </tbody>
+        <tfoot class="table-light">
+            <tr>
+                <td class="text-end"><strong>Total Amount</strong></td>
+                <td class="text-end"><strong>{{ selectedBillForPrint.totalAmount | currency:'₹' }}</strong></td>
+            </tr>
+        </tfoot>
+    </table>
+
+    <div class="mt-5">
+        <p><strong>Remarks:</strong> {{ selectedBillForPrint.remarks || 'No additional remarks.' }}</p>
+    </div>
+
+    <div class="mt-5 pt-5 text-center">
+        <p>__________________________</p>
+        <p>Signature</p>
+    </div>
+</div>
