@@ -95,4 +95,8 @@ app.service('apiService', function ($http, $rootScope) {
         var qs = params.length > 0 ? '?' + params.join('&') : getPeriodParams();
         return $http.post(baseUrl + '/Bills/generate' + qs);
     };
+
+    this.updateBill = function (id, data) {
+        return $http.put(baseUrl + '/Bills/' + id, data);
+    };
 });

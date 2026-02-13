@@ -96,6 +96,17 @@
                             <td>{{ bill.tenantName }}</td>
                             <td>{{ bill.roomNumber }}</td>
                             <td>{{ bill.billPeriod }}</td>
+                            <td>
+                                <div class="input-group input-group-sm" style="width: 120px;">
+                                    <input type="number" class="form-control" ng-model="bill.elecNew"
+                                        placeholder="Reading">
+                                    <button class="btn btn-outline-secondary" type="button"
+                                        ng-click="updateReading(bill)" title="Save Reading">
+                                        <i class="fas fa-save"></i>
+                                    </button>
+                                </div>
+                                <small class="text-muted" ng-if="bill.elecPrev">Prev: {{bill.elecPrev}}</small>
+                            </td>
                             <td>₹{{ bill.totalAmount | number }}</td>
                             <td class="text-success">₹{{ bill.paidAmount | number }}</td>
                             <td>
@@ -106,7 +117,7 @@
                             </td>
                             <td>
                                 <button class="btn btn-sm btn-outline-secondary" ng-click="printBill(bill)">
-                                    <i class="fas fa-eye"></i> View
+                                    <i class="fas fa-print"></i> Print
                                 </button>
                             </td>
                         </tr>
@@ -191,8 +202,14 @@
                     <td>Monthly Rent - Room {{ bill.roomNumber }}</td>
                     <td class="text-end">₹{{ bill.monthlyRent || bill.totalAmount | number }}</td>
                 </tr>
-                <tr ng-if="bill.electricAmount > 0">
-                    <td>Electric Charges</td>
+                <tr ng-if="bill.elecNew > 0 || bill.elecPrev > 0">
+                    <td>
+                        Electric Charges <br>
+                        <small class="text-muted">
+                            (Reading: {{bill.elecNew}} - {{bill.elecPrev}} = {{bill.elecUnits}} units @
+                            ₹{{bill.elecRate}}/unit)
+                        </small>
+                    </td>
                     <td class="text-end">₹{{ bill.electricAmount | number }}</td>
                 </tr>
                 <tr ng-if="bill.miscAmount > 0">

@@ -23,6 +23,24 @@ app.controller('BillingController', function ($scope, $rootScope, $http, apiServ
         });
     }
 
+    $scope.updateReading = function (bill) {
+        if (!bill.elecNew && bill.elecNew !== 0) return;
+
+        $scope.loading = true;
+        apiService.updateBill(bill.id, {
+            currentReading: bill.elecNew
+        }).then(function () {
+            // Reload to get updated calculations
+            var month = parseInt($rootScope.selectedMonth) || new Date().getMonth() + 1;
+            var year = parseInt($rootScope.selectedYear) || new Date().getFullYear();
+            loadData(month, year);
+        }, function (err) {
+            console.error(err);
+            alert('Failed to update reading');
+            $scope.loading = false;
+        });
+    };
+
     $scope.getTotal = function (field) {
         if (!$scope.outstandingBills || $scope.outstandingBills.length === 0) return 0;
         return $scope.outstandingBills.reduce(function (sum, b) {

@@ -65,10 +65,16 @@ namespace RentalBackend.Controllers
                 
                 // Details for Invoice
                 MonthlyRent = l.MonthlyRent,
-                ElectricAmount = l.ElecCost, // + l.ElecNew * l.ElecRate?? No, ElecCost should be populated
+                ElectricAmount = l.ElecCost, 
                 MiscAmount = l.MiscRent,
                 Carryover = l.Carryover,
-                Remarks = l.Remarks
+                Remarks = l.Remarks,
+                
+                // Meter Readings
+                ElecPrev = l.ElecPrev,
+                ElecNew = l.ElecNew,
+                ElecUnits = l.ElecUnits,
+                ElecRate = l.ElecRate
             });
 
             return Ok(result);
@@ -178,6 +184,55 @@ namespace RentalBackend.Controllers
 
             await _context.SaveChangesAsync();
             return Ok(new { message = $"Generated {generatedCount} bills for {period:MMMM yyyy}", count = generatedCount });
+        }
+
+        /// <summary>
+        /// Update meter reading and recalculate bill
+        /// </summary>
+        [HttpPut("{id}")]
+        public async Task<IActionResult> UpdateBill(Guid id, [FromBody] BillUpdateModel model)
+        {
+            var ledger = await _context.MonthlyLedgers.FindAsync(id);
+            if (ledger == null) return NotFound();
+
+            // Update fields
+            if (model.CurrentReading.HasValue)
+            {
+                ledger.ElecNew = model.CurrentReading.Value;
+                ledger.ElecUnits = ledger.ElecNew - ledger.ElecPrev;
+                if (ledger.ElecUnits < 0) ledger.ElecUnits = 0; // Prevent negative consumption? Or allow for rollover? Assuming non-negative for now.
+                
+                ledger.ElecCost = ledger.ElecUnits * ledger.ElecRate;
+            }
+
+            if (model.MiscAmount.HasValue)
+            {
+                ledger.MiscRent = model.MiscAmount.Value;
+            }
+
+            if (model.Remarks != null)
+            {
+                ledger.Remarks = model.Remarks;
+            }
+
+            // Recalculate Totals
+            // Total = Arrears + Rent + Electric + Misc
+            ledger.TotalDue = ledger.Carryover + ledger.MonthlyRent + ledger.ElecCost + ledger.MiscRent;
+            
+            // Recalculate Closing Balance (Total - Paid)
+            ledger.ClosingBalance = ledger.TotalDue - ledger.AmountPaid;
+
+            ledger.UpdatedUtc = DateTime.UtcNow;
+
+            await _context.SaveChangesAsync();
+            return Ok(new { message = "Bill updated successfully", ledger });
+        }
+
+        public class BillUpdateModel
+        {
+            public decimal? CurrentReading { get; set; }
+            public decimal? MiscAmount { get; set; }
+            public string? Remarks { get; set; }
         }
     }
 }
