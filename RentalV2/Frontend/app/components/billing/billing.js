@@ -39,11 +39,37 @@ app.controller('BillingController', function ($scope, $rootScope, $http, apiServ
     };
 
     $scope.printBill = function (bill) {
-        $scope.selectedBillForPrint = bill;
+        $scope.billsToPrint = [bill];
         $scope.printMode = true;
         $timeout(function () {
             window.print();
         }, 500);
+    };
+
+    $scope.printAllBills = function () {
+        if (!$scope.bills || $scope.bills.length === 0) return;
+        $scope.billsToPrint = angular.copy($scope.bills);
+        $scope.printMode = true;
+        $timeout(function () {
+            window.print();
+        }, 1000); // Slightly longer timeout for rendering list
+    };
+
+    $scope.generateBills = function () {
+        if (!confirm('Are you sure you want to generate bills for the selected period? This will create ledger entries for all active tenants.')) return;
+
+        $scope.loading = true;
+        var month = parseInt($rootScope.selectedMonth) || new Date().getMonth() + 1;
+        var year = parseInt($rootScope.selectedYear) || new Date().getFullYear();
+
+        apiService.generateBills(month, year).then(function (response) {
+            alert(response.data.message);
+            loadData(month, year);
+        }, function (error) {
+            console.error('Error generating bills:', error);
+            alert('Failed to generate bills. Please try again.');
+            $scope.loading = false;
+        });
     };
 
     $scope.closePrint = function () {

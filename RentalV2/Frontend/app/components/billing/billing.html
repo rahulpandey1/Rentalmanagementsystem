@@ -7,6 +7,15 @@
 
     <div class="d-flex justify-content-between align-items-center mb-4">
         <h2>Billing & Ledger</h2>
+        <div class="d-flex gap-2">
+            <button class="btn btn-success" ng-click="generateBills()" ng-disabled="loading">
+                <i class="fas fa-magic me-1"></i> Generate Bills
+            </button>
+            <button class="btn btn-outline-primary" ng-click="printAllBills()"
+                ng-disabled="loading || bills.length === 0">
+                <i class="fas fa-print me-1"></i> Print All Invoices
+            </button>
+        </div>
     </div>
 
     <!-- Outstanding Bills -->
@@ -146,72 +155,82 @@
         }
     </style>
 
-    <div class="text-center mb-5">
-        <h1>INVOICE</h1>
-        <h3>Sita Devi Pandey and Sons</h3>
-        <p>11/1B/1 GANPAT RAI KHEMKA LANE LILUAH HOWRAH(W. B.) 711204</p>
-    </div>
-
-    <div class="row mb-4">
-        <div class="col-6">
-            <h5>Bill To:</h5>
-            <p>
-                <strong>{{ selectedBillForPrint.tenantName }}</strong><br>
-                Room: {{ selectedBillForPrint.roomNumber }}
-            </p>
+    <div ng-repeat="bill in billsToPrint"
+        class="print-page mb-5 pb-5 border-bottom border-secondary d-print-border-none">
+        <div class="text-center mb-5">
+            <h1>INVOICE</h1>
+            <h3>Sita Devi Pandey and Sons</h3>
+            <p>11/1B/1 GANPAT RAI KHEMKA LANE LILUAH HOWRAH(W. B.) 711204</p>
         </div>
-        <div class="col-6 text-end">
-            <p>
-                <strong>Invoice #:</strong> {{ selectedBillForPrint.billNumber }}<br>
-                <strong>Period:</strong> {{ selectedBillForPrint.billPeriod }}
-            </p>
+
+        <div class="row mb-4">
+            <div class="col-6">
+                <h5>Bill To:</h5>
+                <p>
+                    <strong>{{ bill.tenantName }}</strong><br>
+                    Room: {{ bill.roomNumber }}
+                </p>
+            </div>
+            <div class="col-6 text-end">
+                <p>
+                    <strong>Invoice #:</strong> {{ bill.billNumber }}<br>
+                    <strong>Period:</strong> {{ bill.billPeriod }}
+                </p>
+            </div>
         </div>
-    </div>
 
-    <table class="table table-bordered border-dark">
-        <thead class="table-light">
-            <tr>
-                <th>Description</th>
-                <th class="text-end">Amount</th>
-            </tr>
-        </thead>
-        <tbody>
-            <tr>
-                <td>Monthly Rent - Room {{ selectedBillForPrint.roomNumber }}</td>
-                <td class="text-end">₹{{ selectedBillForPrint.rentAmount | number }}</td>
-            </tr>
-            <tr ng-if="selectedBillForPrint.electricAmount > 0">
-                <td>Electric Charges</td>
-                <td class="text-end">₹{{ selectedBillForPrint.electricAmount | number }}</td>
-            </tr>
-            <tr ng-if="selectedBillForPrint.miscAmount > 0">
-                <td>Miscellaneous Charges</td>
-                <td class="text-end">₹{{ selectedBillForPrint.miscAmount | number }}</td>
-            </tr>
-        </tbody>
-        <tfoot class="table-light">
-            <tr>
-                <td class="text-end"><strong>Total Amount</strong></td>
-                <td class="text-end"><strong>₹{{ selectedBillForPrint.totalAmount | number }}</strong></td>
-            </tr>
-            <tr ng-if="selectedBillForPrint.paidAmount > 0">
-                <td class="text-end"><strong>Amount Paid</strong></td>
-                <td class="text-end text-success"><strong>₹{{ selectedBillForPrint.paidAmount | number }}</strong></td>
-            </tr>
-            <tr ng-if="selectedBillForPrint.outstandingAmount > 0">
-                <td class="text-end"><strong>Balance Due</strong></td>
-                <td class="text-end text-danger"><strong>₹{{ selectedBillForPrint.outstandingAmount | number }}</strong>
-                </td>
-            </tr>
-        </tfoot>
-    </table>
+        <table class="table table-bordered border-dark">
+            <thead class="table-light">
+                <tr>
+                    <th>Description</th>
+                    <th class="text-end">Amount</th>
+                </tr>
+            </thead>
+            <tbody>
+                <tr>
+                    <td>Monthly Rent - Room {{ bill.roomNumber }}</td>
+                    <td class="text-end">₹{{ bill.monthlyRent || bill.totalAmount | number }}</td>
+                </tr>
+                <tr ng-if="bill.electricAmount > 0">
+                    <td>Electric Charges</td>
+                    <td class="text-end">₹{{ bill.electricAmount | number }}</td>
+                </tr>
+                <tr ng-if="bill.miscAmount > 0">
+                    <td>Miscellaneous Charges</td>
+                    <td class="text-end">₹{{ bill.miscAmount | number }}</td>
+                </tr>
+                <tr ng-if="bill.carryover > 0">
+                    <td>Arrears / Carryover</td>
+                    <td class="text-end">₹{{ bill.carryover | number }}</td>
+                </tr>
+            </tbody>
+            <tfoot class="table-light">
+                <tr>
+                    <td class="text-end"><strong>Total Amount</strong></td>
+                    <td class="text-end"><strong>₹{{ bill.totalAmount | number }}</strong></td>
+                </tr>
+                <tr ng-if="bill.paidAmount > 0">
+                    <td class="text-end"><strong>Amount Paid</strong></td>
+                    <td class="text-end text-success"><strong>₹{{ bill.paidAmount | number }}</strong></td>
+                </tr>
+                <tr ng-if="bill.closingBalance > 0">
+                    <td class="text-end"><strong>Balance Due</strong></td>
+                    <td class="text-end text-danger"><strong>₹{{ bill.closingBalance | number }}</strong>
+                    </td>
+                </tr>
+            </tfoot>
+        </table>
 
-    <div class="mt-5">
-        <p><strong>Remarks:</strong> {{ selectedBillForPrint.remarks || 'No additional remarks.' }}</p>
-    </div>
+        <div class="mt-5">
+            <p><strong>Remarks:</strong> {{ bill.remarks || 'No additional remarks.' }}</p>
+        </div>
 
-    <div class="mt-5 pt-5 text-center">
-        <p>__________________________</p>
-        <p>Signature</p>
+        <div class="mt-5 pt-5 text-center">
+            <p>__________________________</p>
+            <p>Signature</p>
+        </div>
+
+        <!-- Page break for printing -->
+        <div class="page-break"></div>
     </div>
 </div>

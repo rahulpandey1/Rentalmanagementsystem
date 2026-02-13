@@ -87,4 +87,12 @@ app.service('apiService', function ($http, $rootScope) {
         var qs = params.length > 0 ? '?' + params.join('&') : getPeriodParams();
         return $http.get(baseUrl + '/Bills/outstanding' + qs);
     };
+
+    this.generateBills = function (month, year) {
+        var params = [];
+        if (month) params.push('month=' + month);
+        if (year) params.push('year=' + year);
+        var qs = params.length > 0 ? '?' + params.join('&') : getPeriodParams();
+        return $http.post(baseUrl + '/Bills/generate' + qs);
+    };
 });
