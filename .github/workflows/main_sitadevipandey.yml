@@ -24,10 +24,15 @@ jobs:
           dotnet-version: '8.x'
 
       - name: Build with dotnet
-        run: dotnet build --configuration Release
+        run: dotnet build RentalV2/Backend/RentalBackend.csproj --configuration Release
 
       - name: dotnet publish
-        run: dotnet publish -c Release -o "${{env.DOTNET_ROOT}}/myapp"
+        run: dotnet publish RentalV2/Backend/RentalBackend.csproj -c Release -o "${{env.DOTNET_ROOT}}/myapp"
+
+      - name: Copy Frontend to wwwroot
+        run: |
+          New-Item -Path "${{env.DOTNET_ROOT}}/myapp/wwwroot" -ItemType Directory -Force
+          Copy-Item -Path "RentalV2/Frontend/*" -Destination "${{env.DOTNET_ROOT}}/myapp/wwwroot" -Recurse -Force
 
       - name: Upload artifact for deployment job
         uses: actions/upload-artifact@v4
@@ -62,4 +67,3 @@ jobs:
           app-name: 'sitadevipandey'
           slot-name: 'Production'
           package: .
-          

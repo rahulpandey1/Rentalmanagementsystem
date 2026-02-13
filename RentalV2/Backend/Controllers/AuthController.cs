@@ -35,7 +35,16 @@ public class AuthController : ControllerBase
         var email = request.Email.Trim().ToLowerInvariant();
 
         // Check if email is in allowed list
-        var allowedEmails = _config.GetSection("AllowedEmails").Get<string[]>() ?? Array.Empty<string>();
+        var allowedEmailsSection = _config.GetSection("AllowedEmails");
+        var allowedEmails = allowedEmailsSection.Get<string[]>()?.ToList() ?? new List<string>();
+        
+        // Also support comma-separated string for easier Azure configuration
+        var allowedEmailsString = _config["AllowedEmailsString"];
+        if (!string.IsNullOrWhiteSpace(allowedEmailsString))
+        {
+            allowedEmails.AddRange(allowedEmailsString.Split(new[] { ',', ';' }, StringSplitOptions.RemoveEmptyEntries | StringSplitOptions.TrimEntries));
+        }
+
         if (!allowedEmails.Any(e => e.Equals(email, StringComparison.OrdinalIgnoreCase)))
         {
             _logger.LogWarning("Unauthorized login attempt from {Email}", email);
