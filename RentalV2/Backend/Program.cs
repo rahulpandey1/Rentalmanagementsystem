@@ -94,6 +94,7 @@ app.UseAuthorization();
 app.MapControllers();
 
 // Serve index.html for unknown routes (SPA fallback) — but NOT for login.html
+// Serve index.html for unknown routes (SPA fallback) — but NOT for login.html
 if (Directory.Exists(frontendPath))
 {
     app.MapFallbackToFile("index.html", new StaticFileOptions
@@ -101,6 +102,11 @@ if (Directory.Exists(frontendPath))
         FileProvider = new Microsoft.Extensions.FileProviders.PhysicalFileProvider(
             Path.GetFullPath(frontendPath))
     });
+}
+else
+{
+    // Production: Serve from wwwroot
+    app.MapFallbackToFile("index.html");
 }
 
 // Verify database connectivity and ensure schema exists
