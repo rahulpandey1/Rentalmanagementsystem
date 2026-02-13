@@ -19,7 +19,7 @@ public class OtpService
         var expiry = DateTime.UtcNow.AddMinutes(5);
 
         _otpStore[normalizedEmail] = (code, expiry);
-        _logger.LogInformation("OTP generated for {Email}, expires at {Expiry}", normalizedEmail, expiry);
+        _logger.LogInformation("OTP generated: {Code} for {Email}, expires at {Expiry}", code, normalizedEmail, expiry);
 
         return code;
     }
