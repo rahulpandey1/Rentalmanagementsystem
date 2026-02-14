@@ -136,7 +136,7 @@ namespace RentalBackend.Controllers
             var activeOccupancies = await _context.Occupancies
                 .Include(o => o.Flat)
                 .Include(o => o.Tenant)
-                .Where(o => o.StartDate <= period && (o.EndDate == null || o.EndDate >= period))
+                .Where(o => o.StartDate < period.AddMonths(1) && (o.EndDate == null || o.EndDate >= period))
                 .ToListAsync();
 
             int generatedCount = 0;
@@ -198,7 +198,7 @@ namespace RentalBackend.Controllers
             var activeOccupancies = await _context.Occupancies
                 .Include(o => o.Flat)
                 .Include(o => o.Tenant)
-                .Where(o => o.StartDate <= period && (o.EndDate == null || o.EndDate >= period))
+                .Where(o => o.StartDate < period.AddMonths(1) && (o.EndDate == null || o.EndDate >= period))
                 .OrderBy(o => o.Flat!.RoomCode)
                 .ToListAsync();
 

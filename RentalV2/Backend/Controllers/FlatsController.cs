@@ -221,6 +221,53 @@ namespace RentalBackend.Controllers
             };
 
             _context.Occupancies.Add(occupancy);
+
+            // Create or Update Initial Ledger for the start period
+            var startDate = assignment.StartDate ?? DateTime.UtcNow;
+            var period = new DateOnly(startDate.Year, startDate.Month, 1);
+
+            var ledger = await _context.MonthlyLedgers
+                .FirstOrDefaultAsync(l => l.FlatId == id && l.Period == period);
+
+            if (ledger == null)
+            {
+                // Try to get previous month's closing reading for continuity
+                var prevPeriod = period.AddMonths(-1);
+                var prevLedger = await _context.MonthlyLedgers
+                    .FirstOrDefaultAsync(l => l.FlatId == id && l.Period == prevPeriod);
+
+                ledger = new MonthlyLedger
+                {
+                    MonthlyLedgerId = Guid.NewGuid(),
+                    FlatId = id,
+                    TenantId = assignment.TenantId,
+                    Period = period,
+                    DateOfAllotment = DateOnly.FromDateTime(startDate),
+                    ElecPrev = prevLedger?.ElecNew ?? 0,
+                    ElecNew = prevLedger?.ElecNew ?? 0,
+                    ElecRate = prevLedger?.ElecRate ?? 8.0m, // Default rate
+                    Carryover = prevLedger?.ClosingBalance ?? 0
+                };
+                _context.MonthlyLedgers.Add(ledger);
+            }
+            else
+            {
+                // Update existing ledger (e.g., if it was generated as Vacant)
+                ledger.TenantId = assignment.TenantId;
+                ledger.DateOfAllotment = DateOnly.FromDateTime(startDate);
+            }
+
+            // Save financial terms
+            ledger.MonthlyRent = assignment.MonthlyRent;
+            ledger.ElectricSecurity = assignment.SecurityDeposit;
+
+            // Recalculate totals
+            // Note: We don't add Security to TotalDue automatically here as it might be paid separately, 
+            // but we save it. If it needs to be billed, it can be added to MiscRent or handled via payment.
+            ledger.TotalDue = ledger.Carryover + ledger.MonthlyRent + ledger.ElecCost + ledger.MiscRent;
+            ledger.ClosingBalance = ledger.TotalDue - ledger.AmountPaid;
+            ledger.UpdatedUtc = DateTime.UtcNow;
+
             await _context.SaveChangesAsync();
 
             return Ok(new { message = $"Tenant '{tenant.Name}' assigned to {flat.RoomCode}" });

@@ -233,6 +233,10 @@
                     <span id="sendOtpSpinner" class="spinner-border spinner-border-sm ms-2" style="display:none;"
                         role="status"></span>
                 </button>
+                <button type="button" class="btn btn-outline-light w-100 mt-3" id="devLoginBtn" onclick="devLogin()"
+                    style="border-radius:12px; opacity:0.6;">
+                    <i class="fas fa-code"></i> Dev Login
+                </button>
             </div>
 
             <!-- Step 2: OTP -->
@@ -485,6 +489,34 @@
                     showAlert('Network error.', 'error');
                 });
         }
+
+        // Dev Login
+        function devLogin() {
+            var btn = document.getElementById('devLoginBtn');
+            if (btn) btn.disabled = true;
+
+            fetch('/api/Auth/dev-token')
+                .then(function (res) {
+                    if (!res.ok) throw new Error('Dev mode not enabled');
+                    return res.json();
+                })
+                .then(function (data) {
+                    var expiryMs = Date.now() + (data.expiresIn * 1000);
+                    localStorage.setItem('rental_token', data.token);
+                    localStorage.setItem('rental_token_expiry', expiryMs.toString());
+                    localStorage.setItem('rental_user_email', data.email);
+
+                    showAlert('Dev Login Successful! Redirecting...', 'success');
+                    setTimeout(function () {
+                        window.location.href = '/index.html';
+                    }, 500);
+                })
+                .catch(function (err) {
+                    showAlert('Dev Login failed. Is Super User enabled?', 'error');
+                    if (btn) btn.disabled = false;
+                });
+        }
+
 
         // Allow Enter key on email input
         document.getElementById('emailInput').addEventListener('keydown', function (e) {

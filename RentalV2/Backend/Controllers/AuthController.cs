@@ -105,6 +105,29 @@ public class AuthController : ControllerBase
         return Ok(new { email, authenticated = true });
     }
 
+    [AllowAnonymous]
+    [HttpGet("dev-token")]
+    public IActionResult GetDevToken()
+    {
+        var isSuperUser = _config.GetValue<bool>("EnableSuperUser");
+        if (!isSuperUser)
+        {
+            return NotFound(); 
+        }
+
+        var email = "rahulpandey9911@gmail.com"; 
+        var token = GenerateJwtToken(email);
+        var expiryMinutes = int.Parse(_config["Jwt:ExpiryMinutes"] ?? "60");
+
+        return Ok(new
+        {
+            token,
+            email,
+            expiresIn = expiryMinutes * 60, 
+            message = "Dev login successful"
+        });
+    }
+
     private string GenerateJwtToken(string email)
     {
         var key = new SymmetricSecurityKey(Encoding.UTF8.GetBytes(_config["Jwt:Key"]!));
