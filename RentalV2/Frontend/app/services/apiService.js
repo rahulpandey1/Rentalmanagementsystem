@@ -96,6 +96,18 @@ app.service('apiService', function ($http, $rootScope) {
         return $http.post(baseUrl + '/Bills/generate' + qs);
     };
 
+    this.getBillPreview = function (month, year) {
+        var params = [];
+        if (month) params.push('month=' + month);
+        if (year) params.push('year=' + year);
+        var qs = params.length > 0 ? '?' + params.join('&') : getPeriodParams();
+        return $http.get(baseUrl + '/Bills/preview' + qs);
+    };
+
+    this.generateBatchBills = function (data) {
+        return $http.post(baseUrl + '/Bills/generate-batch', data);
+    };
+
     this.updateBill = function (id, data) {
         return $http.put(baseUrl + '/Bills/' + id, data);
     };

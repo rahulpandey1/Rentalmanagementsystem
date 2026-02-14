@@ -74,15 +74,45 @@ app.controller('BillingController', function ($scope, $rootScope, $http, apiServ
         }, 1000); // Slightly longer timeout for rendering list
     };
 
-    $scope.generateBills = function () {
-        if (!confirm('Are you sure you want to generate bills for the selected period? This will create ledger entries for all active tenants.')) return;
+    $scope.openGenerateModal = function () {
+        var month = parseInt($rootScope.selectedMonth) || new Date().getMonth() + 1;
+        var year = parseInt($rootScope.selectedYear) || new Date().getFullYear();
 
+        $scope.loading = true;
+        apiService.getBillPreview(month, year).then(function (response) {
+            $scope.previewBills = response.data;
+            $scope.loading = false;
+
+            // Show Modal
+            var modalEl = document.getElementById('generateBillsModal');
+            var modal = bootstrap.Modal.getInstance(modalEl) || new bootstrap.Modal(modalEl);
+            modal.show();
+        }, function (error) {
+            console.error('Error fetching preview:', error);
+            alert('Failed to load bill preview.');
+            $scope.loading = false;
+        });
+    };
+
+    $scope.confirmGenerate = function () {
         $scope.loading = true;
         var month = parseInt($rootScope.selectedMonth) || new Date().getMonth() + 1;
         var year = parseInt($rootScope.selectedYear) || new Date().getFullYear();
 
-        apiService.generateBills(month, year).then(function (response) {
+        var payload = {
+            month: month,
+            year: year,
+            bills: $scope.previewBills
+        };
+
+        apiService.generateBatchBills(payload).then(function (response) {
             alert(response.data.message);
+
+            // Hide Modal
+            var modalEl = document.getElementById('generateBillsModal');
+            var modal = bootstrap.Modal.getInstance(modalEl);
+            if (modal) modal.hide();
+
             loadData(month, year);
         }, function (error) {
             console.error('Error generating bills:', error);

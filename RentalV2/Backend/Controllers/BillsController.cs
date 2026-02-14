@@ -162,12 +162,12 @@ namespace RentalBackend.Controllers
                     DateOfAllotment = occupancy.StartDate,
                     
                     // Copy from previous or defaults
-                    MonthlyRent = prevLedger?.MonthlyRent ?? 0, // TODO: How to get rent for new tenant?
+                    MonthlyRent = prevLedger?.MonthlyRent ?? 0, 
                     ElectricSecurity = prevLedger?.ElectricSecurity ?? 0,
                     ElecPrev = prevLedger?.ElecNew ?? 0,
-                    ElecNew = prevLedger?.ElecNew ?? 0, // Default to same as prev
-                    ElecRate = prevLedger?.ElecRate ?? 8.0m, // Default rate
-                    MiscRent = 0, // Reset misc charges
+                    ElecNew = prevLedger?.ElecNew ?? 0, 
+                    ElecRate = prevLedger?.ElecRate ?? 8.0m, 
+                    MiscRent = 0, 
                     
                     // Carryover is previous closing balance
                     Carryover = prevLedger?.ClosingBalance ?? 0,
@@ -185,6 +185,118 @@ namespace RentalBackend.Controllers
 
             await _context.SaveChangesAsync();
             return Ok(new { message = $"Generated {generatedCount} bills for {period:MMMM yyyy}", count = generatedCount });
+        }
+
+        [HttpGet("preview")]
+        public async Task<ActionResult<IEnumerable<object>>> GetBillPreview(int? month, int? year)
+        {
+            var targetYear = year ?? DateTime.UtcNow.Year;
+            var targetMonth = month ?? DateTime.UtcNow.Month;
+            var period = new DateOnly(targetYear, targetMonth, 1);
+            var prevPeriod = period.AddMonths(-1);
+
+            var activeOccupancies = await _context.Occupancies
+                .Include(o => o.Flat)
+                .Include(o => o.Tenant)
+                .Where(o => o.StartDate <= period && (o.EndDate == null || o.EndDate >= period))
+                .OrderBy(o => o.Flat!.RoomCode)
+                .ToListAsync();
+
+            var previews = new List<object>();
+
+            foreach (var occupancy in activeOccupancies)
+            {
+                var existing = await _context.MonthlyLedgers
+                    .FirstOrDefaultAsync(l => l.Period == period && l.FlatId == occupancy.FlatId);
+
+                var prevLedger = await _context.MonthlyLedgers
+                    .FirstOrDefaultAsync(l => l.Period == prevPeriod && l.FlatId == occupancy.FlatId);
+
+                previews.Add(new
+                {
+                    FlatId = occupancy.FlatId,
+                    TenantId = occupancy.TenantId,
+                    RoomNumber = occupancy.Flat?.RoomCode,
+                    TenantName = occupancy.Tenant?.Name,
+                    MonthlyRent = existing?.MonthlyRent ?? prevLedger?.MonthlyRent ?? 0,
+                    ElecPrev = existing?.ElecPrev ?? prevLedger?.ElecNew ?? 0,
+                    ElecNew = existing?.ElecNew ?? prevLedger?.ElecNew ?? 0, // Default to prev reading if new
+                    ElecRate = existing?.ElecRate ?? prevLedger?.ElecRate ?? 8.0m,
+                    MiscRent = existing?.MiscRent ?? 0,
+                    Carryover = existing?.Carryover ?? prevLedger?.ClosingBalance ?? 0,
+                    IsGenerated = existing != null
+                });
+            }
+
+            return Ok(previews);
+        }
+
+        [HttpPost("generate-batch")]
+        public async Task<IActionResult> GenerateBatchBills([FromBody] BatchGenerateRequest request)
+        {
+            var period = new DateOnly(request.Year, request.Month, 1);
+            int count = 0;
+
+            foreach (var item in request.Bills)
+            {
+                var ledger = await _context.MonthlyLedgers
+                    .FirstOrDefaultAsync(l => l.Period == period && l.FlatId == item.FlatId);
+
+                if (ledger == null)
+                {
+                    ledger = new MonthlyLedger
+                    {
+                        Period = period,
+                        FlatId = item.FlatId,
+                        TenantId = item.TenantId,
+                        MonthlyLedgerId = Guid.NewGuid(),
+                        DateOfAllotment = period // approximation
+                    };
+                    _context.MonthlyLedgers.Add(ledger);
+                }
+
+                // Update fields from preview
+                ledger.MonthlyRent = item.MonthlyRent;
+                ledger.ElecPrev = item.ElecPrev;
+                ledger.ElecNew = item.ElecNew;
+                ledger.ElecRate = item.ElecRate;
+                ledger.ElecUnits = (ledger.ElecNew - ledger.ElecPrev);
+                if (ledger.ElecUnits < 0) ledger.ElecUnits = 0;
+                
+                ledger.ElecCost = ledger.ElecUnits * ledger.ElecRate;
+                
+                ledger.MiscRent = item.MiscRent;
+                ledger.Carryover = item.Carryover; 
+                ledger.Remarks = string.Empty; // TODO: Add remarks to batch?
+
+                ledger.TotalDue = ledger.Carryover + ledger.MonthlyRent + ledger.ElecCost + ledger.MiscRent;
+                ledger.ClosingBalance = ledger.TotalDue - ledger.AmountPaid;
+                ledger.UpdatedUtc = DateTime.UtcNow;
+
+                count++;
+            }
+
+            await _context.SaveChangesAsync();
+            return Ok(new { message = $"Processed {count} bills", count });
+        }
+
+        public class BatchGenerateRequest
+        {
+            public int Month { get; set; }
+            public int Year { get; set; }
+            public List<BatchBillItem> Bills { get; set; } = new();
+        }
+
+        public class BatchBillItem
+        {
+            public Guid FlatId { get; set; }
+            public Guid? TenantId { get; set; }
+            public decimal MonthlyRent { get; set; }
+            public decimal ElecPrev { get; set; }
+            public decimal ElecNew { get; set; }
+            public decimal ElecRate { get; set; }
+            public decimal MiscRent { get; set; }
+            public decimal Carryover { get; set; }
         }
 
         /// <summary>

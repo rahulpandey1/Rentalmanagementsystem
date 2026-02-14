@@ -8,7 +8,7 @@
     <div class="d-flex justify-content-between align-items-center mb-4">
         <h2>Billing & Ledger</h2>
         <div class="d-flex gap-2">
-            <button class="btn btn-success" ng-click="generateBills()" ng-disabled="loading">
+            <button class="btn btn-success" ng-click="openGenerateModal()" ng-disabled="loading">
                 <i class="fas fa-magic me-1"></i> Generate Bills
             </button>
             <button class="btn btn-outline-primary" ng-click="printAllBills()"
@@ -260,5 +260,61 @@
 
         <!-- Page break for printing -->
         <div class="page-break"></div>
+    </div>
+</div>
+
+<!-- Modal -->
+<div class="modal fade" id="generateBillsModal" tabindex="-1">
+    <div class="modal-dialog modal-xl">
+        <div class="modal-content">
+            <div class="modal-header">
+                <h5 class="modal-title">Generate Bills: Review & Updates</h5>
+                <button type="button" class="btn-close" data-bs-dismiss="modal"></button>
+            </div>
+            <div class="modal-body">
+                <div ng-if="$parent.previewBills.length === 0" class="alert alert-warning">
+                    No active tenants found for this period.
+                </div>
+                <table class="table table-bordered table-sm" ng-if="$parent.previewBills.length > 0">
+                    <thead>
+                        <tr>
+                            <th>Room</th>
+                            <th>Tenant</th>
+                            <th>Prev Reading</th>
+                            <th>Current Reading</th>
+                            <th>Monthly Rent</th>
+                            <th>Status</th>
+                        </tr>
+                    </thead>
+                    <tbody>
+                        <tr ng-repeat="item in $parent.previewBills">
+                            <td>{{item.roomNumber}}</td>
+                            <td>{{item.tenantName}}</td>
+                            <td>{{item.elecPrev}}</td>
+                            <td>
+                                <input type="number" class="form-control form-control-sm" ng-model="item.elecNew"
+                                    placeholder="Enter Reading">
+                            </td>
+                            <td>
+                                <input type="number" class="form-control form-control-sm" ng-model="item.monthlyRent">
+                            </td>
+                            <td>
+                                <span class="badge"
+                                    ng-class="{'bg-success': item.isGenerated, 'bg-secondary': !item.isGenerated}">
+                                    {{ item.isGenerated ? 'Generated' : 'New' }}
+                                </span>
+                            </td>
+                        </tr>
+                    </tbody>
+                </table>
+            </div>
+            <div class="modal-footer">
+                <button type="button" class="btn btn-secondary" data-bs-dismiss="modal">Cancel</button>
+                <button type="button" class="btn btn-primary" ng-click="confirmGenerate()"
+                    ng-disabled="$parent.previewBills.length === 0">
+                    <i class="fas fa-magic me-1"></i> Confirm & Generate
+                </button>
+            </div>
+        </div>
     </div>
 </div>
