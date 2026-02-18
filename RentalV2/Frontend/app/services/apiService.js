@@ -111,4 +111,35 @@ app.service('apiService', function ($http, $rootScope) {
     this.updateBill = function (id, data) {
         return $http.put(baseUrl + '/Bills/' + id, data);
     };
+
+    // Audit Logs
+    this.getAuditLogs = function (params) {
+        var qs = [];
+        if (params.startDate) qs.push('startDate=' + params.startDate);
+        if (params.endDate) qs.push('endDate=' + params.endDate);
+        if (params.user) qs.push('user=' + encodeURIComponent(params.user));
+        if (params.role) qs.push('role=' + encodeURIComponent(params.role));
+        if (params.action) qs.push('action=' + encodeURIComponent(params.action));
+        if (params.moduleName) qs.push('moduleName=' + encodeURIComponent(params.moduleName));
+        if (params.entityName) qs.push('entityName=' + encodeURIComponent(params.entityName));
+        if (params.page) qs.push('page=' + params.page);
+        if (params.pageSize) qs.push('pageSize=' + params.pageSize);
+        return $http.get(baseUrl + '/AuditLogs' + (qs.length > 0 ? '?' + qs.join('&') : ''));
+    };
+
+    this.getAuditLogDetail = function (id) {
+        return $http.get(baseUrl + '/AuditLogs/' + id);
+    };
+
+    this.getAuditLogFilters = function () {
+        return $http.get(baseUrl + '/AuditLogs/filters');
+    };
+
+    this.cleanupAuditLogs = function () {
+        return $http.post(baseUrl + '/AuditLogs/cleanup');
+    };
+
+    this.downloadLogFiles = function () {
+        return $http.get(baseUrl + '/Logs/download', { responseType: 'arraybuffer' });
+    };
 });

@@ -69,6 +69,10 @@ app.config(function ($routeProvider, $httpProvider) {
             templateUrl: 'app/components/summary/summary.html',
             controller: 'SummaryController'
         })
+        .when('/auditlogs', {
+            templateUrl: 'app/components/auditlogs/auditlogs.html',
+            controller: 'AuditLogsController'
+        })
         .otherwise({
             redirectTo: '/dashboard'
         });
@@ -85,6 +89,14 @@ app.controller('MainController', function ($scope, $interval, $rootScope, $http,
 
     // Show logged-in user email
     $scope.userEmail = $window.localStorage.getItem('rental_user_email') || '';
+
+    // Check if user is admin (for showing audit logs tab)
+    $scope.isAdmin = false;
+    $http.get('/api/Auth/me').then(function (response) {
+        $scope.isAdmin = response.data.isAdmin || false;
+    }).catch(function () {
+        $scope.isAdmin = false;
+    });
 
     // Logout function
     $scope.logout = function () {

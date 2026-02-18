@@ -2,6 +2,7 @@ using Microsoft.AspNetCore.Authorization;
 using Microsoft.AspNetCore.Mvc;
 using Microsoft.EntityFrameworkCore;
 using RentalBackend.Data;
+using RentalBackend.Filters;
 using RentalBackend.Models;
 
 namespace RentalBackend.Controllers
@@ -9,6 +10,7 @@ namespace RentalBackend.Controllers
     [Authorize]
     [ApiController]
     [Route("api/[controller]")]
+    [AuditLog("Tenant", "Tenant")]
     public class TenantsController : ControllerBase
     {
         private readonly RentManagementContext _context;

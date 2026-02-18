@@ -16,6 +16,8 @@ namespace RentalBackend.Data
         public DbSet<MonthlyLedger> MonthlyLedgers { get; set; } = null!;
         public DbSet<Payment> Payments { get; set; } = null!;
 
+        public DbSet<AuditLog> AuditLogs { get; set; } = null!;
+
         protected override void OnModelCreating(ModelBuilder modelBuilder)
         {
             base.OnModelCreating(modelBuilder);
@@ -111,6 +113,29 @@ namespace RentalBackend.Data
                 entity.HasIndex(e => new { e.Period, e.FlatId });
                 entity.HasIndex(e => e.TenantId);
             });
+
+            // AuditLog entity configuration
+            modelBuilder.Entity<AuditLog>(entity =>
+            {
+                entity.HasKey(e => e.Id);
+                entity.Property(e => e.UserId).IsRequired().HasMaxLength(255);
+                entity.Property(e => e.UserName).IsRequired().HasMaxLength(255);
+                entity.Property(e => e.Role).IsRequired().HasMaxLength(50);
+                entity.Property(e => e.Action).IsRequired().HasMaxLength(100);
+                entity.Property(e => e.ModuleName).IsRequired().HasMaxLength(100);
+                entity.Property(e => e.EntityName).IsRequired().HasMaxLength(100);
+                entity.Property(e => e.EntityId).HasMaxLength(255);
+                entity.Property(e => e.IpAddress).HasMaxLength(50);
+                entity.Property(e => e.BrowserInfo).HasMaxLength(500);
+                entity.Property(e => e.RequestUrl).HasMaxLength(500);
+                entity.Property(e => e.CorrelationId).HasMaxLength(100);
+
+                entity.HasIndex(e => e.CreatedDateTime);
+                entity.HasIndex(e => e.UserId);
+                entity.HasIndex(e => e.Action);
+                entity.HasIndex(e => e.ModuleName);
+            });
         }
+
     }
 }

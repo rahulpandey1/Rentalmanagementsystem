@@ -4,25 +4,29 @@ using System.Text;
 using Microsoft.AspNetCore.Authorization;
 using Microsoft.AspNetCore.Mvc;
 using Microsoft.IdentityModel.Tokens;
+using RentalBackend.Filters;
 using RentalBackend.Services;
 
 namespace RentalBackend.Controllers;
 
 [ApiController]
 [Route("api/[controller]")]
+[AuditLog("Authentication", "User")]
 public class AuthController : ControllerBase
 {
     private readonly IConfiguration _config;
     private readonly OtpService _otpService;
     private readonly EmailService _emailService;
     private readonly ILogger<AuthController> _logger;
+    private readonly AuditService _auditService;
 
-    public AuthController(IConfiguration config, OtpService otpService, EmailService emailService, ILogger<AuthController> logger)
+    public AuthController(IConfiguration config, OtpService otpService, EmailService emailService, ILogger<AuthController> logger, AuditService auditService)
     {
         _config = config;
         _otpService = otpService;
         _emailService = emailService;
         _logger = logger;
+        _auditService = auditService;
     }
 
     [AllowAnonymous]
@@ -48,6 +52,7 @@ public class AuthController : ControllerBase
         if (!allowedEmails.Any(e => e.Equals(email, StringComparison.OrdinalIgnoreCase)))
         {
             _logger.LogWarning("Unauthorized login attempt from {Email}", email);
+            await _auditService.LogAsync("FailedLogin", "Authentication", "User", null, null, new { email, reason = "Email not authorized" });
             return StatusCode(403, new { message = "This email is not authorized to access the application." });
         }
 
@@ -68,7 +73,7 @@ public class AuthController : ControllerBase
 
     [AllowAnonymous]
     [HttpPost("verify-otp")]
-    public IActionResult VerifyOtp([FromBody] VerifyOtpRequest request)
+    public async Task<IActionResult> VerifyOtp([FromBody] VerifyOtpRequest request)
     {
         if (string.IsNullOrWhiteSpace(request.Email) || string.IsNullOrWhiteSpace(request.Code))
             return BadRequest(new { message = "Email and code are required" });
@@ -77,6 +82,7 @@ public class AuthController : ControllerBase
 
         if (!_otpService.ValidateOtp(email, request.Code))
         {
+            await _auditService.LogAsync("FailedLogin", "Authentication", "User", null, null, new { email, reason = "Invalid OTP" });
             return Unauthorized(new { message = "Invalid or expired verification code." });
         }
 
@@ -85,6 +91,7 @@ public class AuthController : ControllerBase
         var expiryMinutes = int.Parse(_config["Jwt:ExpiryMinutes"] ?? "60");
 
         _logger.LogInformation("Login successful for {Email}", email);
+        await _auditService.LogAsync("Login", "Authentication", "User", null, null, new { email });
         return Ok(new
         {
             token,
@@ -102,7 +109,9 @@ public class AuthController : ControllerBase
             return Unauthorized(new { message = "Not authenticated" });
 
         var email = User.FindFirst(ClaimTypes.Email)?.Value ?? User.FindFirst(ClaimTypes.NameIdentifier)?.Value;
-        return Ok(new { email, authenticated = true });
+        var adminEmails = _config.GetSection("AdminEmails").Get<string[]>() ?? Array.Empty<string>();
+        var isAdmin = adminEmails.Any(a => a.Equals(email, StringComparison.OrdinalIgnoreCase));
+        return Ok(new { email, authenticated = true, isAdmin });
     }
 
     [AllowAnonymous]

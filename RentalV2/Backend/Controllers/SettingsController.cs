@@ -1,17 +1,19 @@
 using Microsoft.AspNetCore.Authorization;
 using Microsoft.AspNetCore.Mvc;
+using RentalBackend.Filters;
 
 namespace RentalBackend.Controllers
 {
     [Authorize]
     [ApiController]
     [Route("api/[controller]")]
+    [AuditLog("Settings", "Configuration")]
     public class SettingsController : ControllerBase
     {
         // Default settings (no SystemConfiguration table in the new DB)
         private static readonly Dictionary<string, string> _defaults = new()
         {
-            { "ElectricRatePerUnit", "8.0" },
+            { "ElectricRatePerUnit", "12.0" },
             { "BillDueDays", "7" },
             { "LateFeePercentage", "5" }
         };

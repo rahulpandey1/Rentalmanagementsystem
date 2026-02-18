@@ -2,6 +2,7 @@ using Microsoft.AspNetCore.Authorization;
 using Microsoft.AspNetCore.Mvc;
 using Microsoft.EntityFrameworkCore;
 using RentalBackend.Data;
+using RentalBackend.Filters;
 using RentalBackend.Models;
 
 namespace RentalBackend.Controllers
@@ -9,6 +10,7 @@ namespace RentalBackend.Controllers
     [Authorize]
     [ApiController]
     [Route("api/[controller]")]
+    [AuditLog("Payment", "Bill")]
     public class BillsController : ControllerBase
     {
         private readonly RentManagementContext _context;
@@ -166,7 +168,7 @@ namespace RentalBackend.Controllers
                     ElectricSecurity = prevLedger?.ElectricSecurity ?? 0,
                     ElecPrev = prevLedger?.ElecNew ?? 0,
                     ElecNew = prevLedger?.ElecNew ?? 0, 
-                    ElecRate = prevLedger?.ElecRate ?? 8.0m, 
+                    ElecRate = prevLedger?.ElecRate ?? 12.0m, 
                     MiscRent = 0, 
                     
                     // Carryover is previous closing balance
@@ -221,7 +223,7 @@ namespace RentalBackend.Controllers
                     MonthlyRent = existing?.MonthlyRent ?? prevLedger?.MonthlyRent ?? 0,
                     ElecPrev = existing?.ElecPrev ?? prevLedger?.ElecNew ?? 0,
                     ElecNew = existing?.ElecNew ?? prevLedger?.ElecNew ?? 0, // Default to prev reading if new
-                    ElecRate = existing?.ElecRate ?? prevLedger?.ElecRate ?? 8.0m,
+                    ElecRate = existing?.ElecRate ?? prevLedger?.ElecRate ?? 12.0m,
                     MiscRent = existing?.MiscRent ?? 0,
                     Carryover = existing?.Carryover ?? prevLedger?.ClosingBalance ?? 0,
                     IsGenerated = existing != null

@@ -2,6 +2,7 @@ using Microsoft.AspNetCore.Authorization;
 using Microsoft.AspNetCore.Mvc;
 using Microsoft.EntityFrameworkCore;
 using RentalBackend.Data;
+using RentalBackend.Filters;
 using RentalBackend.Models;
 
 namespace RentalBackend.Controllers
@@ -9,6 +10,7 @@ namespace RentalBackend.Controllers
     [Authorize]
     [ApiController]
     [Route("api/[controller]")]
+    [AuditLog("Property", "Flat")]
     public class FlatsController : ControllerBase
     {
         private readonly RentManagementContext _context;
@@ -31,15 +33,28 @@ namespace RentalBackend.Controllers
                     .Where(l => l.Period == period)
                     .ToListAsync();
 
+                // Load active occupancies to cross-reference with ledger data
+                var activeOccupancies = await _context.Occupancies
+                    .Where(o => o.EndDate == null)
+                    .ToListAsync();
+                var activeOccByFlat = activeOccupancies
+                    .GroupBy(o => o.FlatId)
+                    .ToDictionary(g => g.Key, g => g.First());
+
                 var ledgerByFlat = ledgers.ToDictionary(l => l.FlatId);
 
                 var result = allFlats.Select((f, index) =>
                 {
                     ledgerByFlat.TryGetValue(f.FlatId, out var ledger);
+                    activeOccByFlat.TryGetValue(f.FlatId, out var activeOcc);
                     var tenantName = ledger?.Tenant?.Name;
-                    var isVacant = ledger == null || tenantName == null ||
+
+                    // Room is vacant if: no active occupancy OR ledger shows vacant/no tenant
+                    var hasActiveOccupancy = activeOcc != null && activeOcc.TenantId != null;
+                    var ledgerShowsVacant = ledger == null || tenantName == null ||
                         tenantName.Contains("VACANT", StringComparison.OrdinalIgnoreCase) ||
                         tenantName.Contains("VACAMT", StringComparison.OrdinalIgnoreCase);
+                    var isVacant = !hasActiveOccupancy || ledgerShowsVacant;
 
                     return new
                     {
@@ -222,51 +237,64 @@ namespace RentalBackend.Controllers
 
             _context.Occupancies.Add(occupancy);
 
-            // Create or Update Initial Ledger for the start period
+            // Create ledger entries from start period through current month
             var startDate = assignment.StartDate ?? DateTime.UtcNow;
-            var period = new DateOnly(startDate.Year, startDate.Month, 1);
+            var startPeriod = new DateOnly(startDate.Year, startDate.Month, 1);
+            var currentPeriod = new DateOnly(DateTime.UtcNow.Year, DateTime.UtcNow.Month, 1);
 
-            var ledger = await _context.MonthlyLedgers
-                .FirstOrDefaultAsync(l => l.FlatId == id && l.Period == period);
+            // Get previous month's data for continuity
+            var prevPeriod = startPeriod.AddMonths(-1);
+            var prevLedger = await _context.MonthlyLedgers
+                .FirstOrDefaultAsync(l => l.FlatId == id && l.Period == prevPeriod);
 
-            if (ledger == null)
+            var period = startPeriod;
+            MonthlyLedger? lastCreated = null;
+
+            while (period <= currentPeriod)
             {
-                // Try to get previous month's closing reading for continuity
-                var prevPeriod = period.AddMonths(-1);
-                var prevLedger = await _context.MonthlyLedgers
-                    .FirstOrDefaultAsync(l => l.FlatId == id && l.Period == prevPeriod);
+                var ledger = await _context.MonthlyLedgers
+                    .FirstOrDefaultAsync(l => l.FlatId == id && l.Period == period);
 
-                ledger = new MonthlyLedger
+                if (ledger == null)
                 {
-                    MonthlyLedgerId = Guid.NewGuid(),
-                    FlatId = id,
-                    TenantId = assignment.TenantId,
-                    Period = period,
-                    DateOfAllotment = DateOnly.FromDateTime(startDate),
-                    ElecPrev = prevLedger?.ElecNew ?? 0,
-                    ElecNew = prevLedger?.ElecNew ?? 0,
-                    ElecRate = prevLedger?.ElecRate ?? 8.0m, // Default rate
-                    Carryover = prevLedger?.ClosingBalance ?? 0
-                };
-                _context.MonthlyLedgers.Add(ledger);
-            }
-            else
-            {
-                // Update existing ledger (e.g., if it was generated as Vacant)
-                ledger.TenantId = assignment.TenantId;
-                ledger.DateOfAllotment = DateOnly.FromDateTime(startDate);
-            }
+                    // Use previous ledger (from DB or just created) for continuity
+                    var prev = lastCreated ?? prevLedger;
+                    ledger = new MonthlyLedger
+                    {
+                        MonthlyLedgerId = Guid.NewGuid(),
+                        FlatId = id,
+                        TenantId = assignment.TenantId,
+                        Period = period,
+                        DateOfAllotment = period == startPeriod ? DateOnly.FromDateTime(startDate) : null,
+                        MonthlyRent = assignment.MonthlyRent,
+                        ElectricSecurity = assignment.SecurityDeposit,
+                        ElecPrev = prev?.ElecNew ?? 0,
+                        ElecNew = prev?.ElecNew ?? 0,
+                        ElecRate = prev?.ElecRate ?? 12.0m,
+                        Carryover = prev?.ClosingBalance ?? 0,
+                        MiscRent = 0
+                    };
+                    ledger.TotalDue = ledger.Carryover + ledger.MonthlyRent + ledger.ElecCost + ledger.MiscRent;
+                    ledger.ClosingBalance = ledger.TotalDue - ledger.AmountPaid;
+                    ledger.UpdatedUtc = DateTime.UtcNow;
+                    _context.MonthlyLedgers.Add(ledger);
+                }
+                else
+                {
+                    // Update existing ledger
+                    ledger.TenantId = assignment.TenantId;
+                    if (period == startPeriod)
+                        ledger.DateOfAllotment = DateOnly.FromDateTime(startDate);
+                    ledger.MonthlyRent = assignment.MonthlyRent;
+                    ledger.ElectricSecurity = assignment.SecurityDeposit;
+                    ledger.TotalDue = ledger.Carryover + ledger.MonthlyRent + ledger.ElecCost + ledger.MiscRent;
+                    ledger.ClosingBalance = ledger.TotalDue - ledger.AmountPaid;
+                    ledger.UpdatedUtc = DateTime.UtcNow;
+                }
 
-            // Save financial terms
-            ledger.MonthlyRent = assignment.MonthlyRent;
-            ledger.ElectricSecurity = assignment.SecurityDeposit;
-
-            // Recalculate totals
-            // Note: We don't add Security to TotalDue automatically here as it might be paid separately, 
-            // but we save it. If it needs to be billed, it can be added to MiscRent or handled via payment.
-            ledger.TotalDue = ledger.Carryover + ledger.MonthlyRent + ledger.ElecCost + ledger.MiscRent;
-            ledger.ClosingBalance = ledger.TotalDue - ledger.AmountPaid;
-            ledger.UpdatedUtc = DateTime.UtcNow;
+                lastCreated = ledger;
+                period = period.AddMonths(1);
+            }
 
             await _context.SaveChangesAsync();
 
@@ -293,7 +321,10 @@ namespace RentalBackend.Controllers
         }
 
         /// <summary>
-        /// Renew agreement (end current, start new with same tenant)
+        /// Renew agreement / Hike rent for same tenant in same flat
+        /// Works in two modes:
+        /// 1. If active occupancy exists: renews occupancy + updates rent on ledger
+        /// 2. If no active occupancy but ledger exists for period: just updates rent (rent hike)
         /// </summary>
         [HttpPost("{id}/renew-agreement")]
         public async Task<ActionResult> RenewAgreement(Guid id, [FromBody] RenewRequest request)
@@ -302,28 +333,73 @@ namespace RentalBackend.Controllers
                 .Include(o => o.Tenant)
                 .FirstOrDefaultAsync(o => o.FlatId == id && o.EndDate == null);
 
-            if (activeOcc == null || activeOcc.TenantId == null)
-                return BadRequest("No active occupancy to renew.");
+            var now = DateTime.UtcNow;
+            var effectiveDate = request.StartDate ?? now;
+            var period = new DateOnly(effectiveDate.Year, effectiveDate.Month, 1);
 
-            // End current occupancy
-            activeOcc.EndDate = request.StartDate != null
-                ? DateOnly.FromDateTime(request.StartDate.Value).AddDays(-1)
-                : DateOnly.FromDateTime(DateTime.UtcNow);
+            // Get current ledger for this period
+            var ledger = await _context.MonthlyLedgers
+                .FirstOrDefaultAsync(l => l.FlatId == id && l.Period == period);
 
-            // Create new occupancy
-            var newOcc = new Occupancy
+            if (activeOcc != null && activeOcc.TenantId != null)
             {
-                FlatId = id,
-                TenantId = activeOcc.TenantId,
-                StartDate = request.StartDate != null
-                    ? DateOnly.FromDateTime(request.StartDate.Value)
-                    : DateOnly.FromDateTime(DateTime.UtcNow)
-            };
+                // Mode 1: Full renewal — end current occupancy, start new one, update rent
+                activeOcc.EndDate = DateOnly.FromDateTime(effectiveDate).AddDays(-1);
 
-            _context.Occupancies.Add(newOcc);
-            await _context.SaveChangesAsync();
+                var newOcc = new Occupancy
+                {
+                    FlatId = id,
+                    TenantId = activeOcc.TenantId,
+                    StartDate = DateOnly.FromDateTime(effectiveDate)
+                };
+                _context.Occupancies.Add(newOcc);
 
-            return Ok(new { message = $"Agreement renewed for '{activeOcc.Tenant?.Name}'." });
+                // Update rent on current ledger if exists
+                if (ledger != null && request.MonthlyRent > 0)
+                {
+                    var oldRent = ledger.MonthlyRent;
+                    ledger.MonthlyRent = request.MonthlyRent;
+                    ledger.TotalDue = ledger.Carryover + ledger.MonthlyRent + ledger.ElecCost + ledger.MiscRent;
+                    ledger.ClosingBalance = ledger.TotalDue - ledger.AmountPaid;
+                    ledger.UpdatedUtc = DateTime.UtcNow;
+                }
+
+                await _context.SaveChangesAsync();
+                return Ok(new { message = $"Agreement renewed for '{activeOcc.Tenant?.Name}'. Rent updated to ₹{request.MonthlyRent}." });
+            }
+            else if (ledger != null && ledger.TenantId != null)
+            {
+                // Mode 2: Rent hike only — no active occupancy but ledger shows tenant
+                // This happens when occupancy was ended but ledger still has data
+                if (request.MonthlyRent > 0)
+                {
+                    var oldRent = ledger.MonthlyRent;
+                    ledger.MonthlyRent = request.MonthlyRent;
+                    ledger.TotalDue = ledger.Carryover + ledger.MonthlyRent + ledger.ElecCost + ledger.MiscRent;
+                    ledger.ClosingBalance = ledger.TotalDue - ledger.AmountPaid;
+                    ledger.UpdatedUtc = DateTime.UtcNow;
+
+                    // Also re-create the occupancy since it should be active
+                    var newOcc = new Occupancy
+                    {
+                        FlatId = id,
+                        TenantId = ledger.TenantId,
+                        StartDate = DateOnly.FromDateTime(effectiveDate)
+                    };
+                    _context.Occupancies.Add(newOcc);
+
+                    await _context.SaveChangesAsync();
+
+                    var tenant = await _context.Tenants.FindAsync(ledger.TenantId);
+                    return Ok(new { message = $"Rent updated for '{tenant?.Name}' from ₹{oldRent} to ₹{request.MonthlyRent}." });
+                }
+
+                return BadRequest("Monthly rent must be greater than 0.");
+            }
+            else
+            {
+                return BadRequest("No active occupancy or ledger found for this flat. Assign a tenant first.");
+            }
         }
 
         [HttpPut("{id}/availability")]
