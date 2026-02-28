@@ -20,6 +20,26 @@ namespace RentalBackend.Controllers
             _context = context;
         }
 
+        private async Task<int> GetNextInvoiceBaseNumber()
+        {
+            var maxInvoice = await _context.MonthlyLedgers
+                .Where(l => l.InvoiceNumber != null)
+                .OrderByDescending(l => l.InvoiceNumber)
+                .Select(l => l.InvoiceNumber)
+                .FirstOrDefaultAsync();
+
+            int nextNum = 1;
+            if (maxInvoice != null && maxInvoice.StartsWith("INV-") && 
+                int.TryParse(maxInvoice.Substring(4), out int currentNum))
+            {
+                nextNum = currentNum + 1;
+            }
+
+            return nextNum;
+        }
+
+        private string FormatInvoice(int num) => $"INV-{num:D6}";
+
         [HttpGet]
         public async Task<ActionResult<IEnumerable<object>>> GetFlats(int? month, int? year)
         {
@@ -35,6 +55,7 @@ namespace RentalBackend.Controllers
 
                 // Load active occupancies to cross-reference with ledger data
                 var activeOccupancies = await _context.Occupancies
+                    .Include(o => o.Tenant)
                     .Where(o => o.EndDate == null)
                     .ToListAsync();
                 var activeOccByFlat = activeOccupancies
@@ -47,14 +68,12 @@ namespace RentalBackend.Controllers
                 {
                     ledgerByFlat.TryGetValue(f.FlatId, out var ledger);
                     activeOccByFlat.TryGetValue(f.FlatId, out var activeOcc);
-                    var tenantName = ledger?.Tenant?.Name;
+                    var tenantName = ledger?.Tenant?.Name ?? activeOcc?.Tenant?.Name;
 
-                    // Room is vacant if: no active occupancy OR ledger shows vacant/no tenant
+                    // Room is vacant if: no active occupancy (source of truth), 
+                    // OR ledger explicitly shows VACANT name (historical data)
                     var hasActiveOccupancy = activeOcc != null && activeOcc.TenantId != null;
-                    var ledgerShowsVacant = ledger == null || tenantName == null ||
-                        tenantName.Contains("VACANT", StringComparison.OrdinalIgnoreCase) ||
-                        tenantName.Contains("VACAMT", StringComparison.OrdinalIgnoreCase);
-                    var isVacant = !hasActiveOccupancy || ledgerShowsVacant;
+                    var isVacant = !hasActiveOccupancy;
 
                     return new
                     {
@@ -62,6 +81,8 @@ namespace RentalBackend.Controllers
                         RoomNumber = f.RoomCode,
                         RoomCode = f.RoomCode,
                         FloorNumber = f.Floor ?? 0,
+                        f.MeterId,
+                        f.BaseRent,
                         SerialNumber = ledger?.SerialNumber ?? (index + 1),
                         // Tenant info
                         TenantName = tenantName ?? "VACANT",
@@ -80,6 +101,7 @@ namespace RentalBackend.Controllers
                         ElecRate = ledger?.ElecRate ?? 0,
                         // Financials
                         MiscRent = ledger?.MiscRent ?? 0,
+                        MiscChargeName = ledger?.MiscChargeName,
                         Carryover = ledger?.Carryover ?? 0,
                         TotalDue = ledger?.TotalDue ?? 0,
                         AmountPaid = ledger?.AmountPaid ?? 0,
@@ -89,9 +111,10 @@ namespace RentalBackend.Controllers
                         // For card-view compatibility
                         CurrentTenant = isVacant ? null : new
                         {
-                            Id = ledger?.TenantId,
+                            Id = ledger?.TenantId ?? activeOcc?.TenantId,
                             Name = tenantName,
-                            Since = ledger?.DateOfAllotment?.ToString("dd-MMM-yyyy"),
+                            Since = ledger?.DateOfAllotment?.ToString("dd-MMM-yyyy")
+                                ?? activeOcc?.StartDate?.ToString("dd-MMM-yyyy"),
                             SecurityDeposit = ledger?.ElectricSecurity ?? 0
                         }
                     };
@@ -121,9 +144,11 @@ namespace RentalBackend.Controllers
                     RoomNumber = f.RoomCode,
                     RoomCode = f.RoomCode,
                     FloorNumber = f.Floor ?? 0,
-                    MonthlyRent = latestLedger?.MonthlyRent ?? 0,
+                    f.MeterId,
+                    f.BaseRent,
+                    MonthlyRent = latestLedger?.MonthlyRent ?? f.BaseRent,
                     IsAvailable = activeOcc == null || activeOcc.TenantId == null,
-                    ElectricMeterNumber = (string?)null,
+                    ElectricMeterNumber = f.MeterId,
                     LastMeterReading = (decimal?)latestLedger?.ElecNew,
                     LastReadingDate = latestLedger?.Period.ToDateTime(TimeOnly.MinValue),
                     CurrentTenant = activeOcc?.Tenant == null ? null : new
@@ -249,6 +274,7 @@ namespace RentalBackend.Controllers
 
             var period = startPeriod;
             MonthlyLedger? lastCreated = null;
+            var invoiceCounter = await GetNextInvoiceBaseNumber();
 
             while (period <= currentPeriod)
             {
@@ -267,16 +293,18 @@ namespace RentalBackend.Controllers
                         Period = period,
                         DateOfAllotment = period == startPeriod ? DateOnly.FromDateTime(startDate) : null,
                         MonthlyRent = assignment.MonthlyRent,
-                        ElectricSecurity = assignment.SecurityDeposit,
+                        ElectricSecurity = assignment.SecurityDeposit, // Electric meter security
                         ElecPrev = prev?.ElecNew ?? 0,
                         ElecNew = prev?.ElecNew ?? 0,
                         ElecRate = prev?.ElecRate ?? 12.0m,
                         Carryover = prev?.ClosingBalance ?? 0,
-                        MiscRent = 0
+                        MiscRent = assignment.MiscRent,
+                        MiscChargeName = assignment.MiscChargeName
                     };
                     ledger.TotalDue = ledger.Carryover + ledger.MonthlyRent + ledger.ElecCost + ledger.MiscRent;
                     ledger.ClosingBalance = ledger.TotalDue - ledger.AmountPaid;
                     ledger.UpdatedUtc = DateTime.UtcNow;
+                    ledger.InvoiceNumber = FormatInvoice(invoiceCounter++);
                     _context.MonthlyLedgers.Add(ledger);
                 }
                 else
@@ -287,13 +315,33 @@ namespace RentalBackend.Controllers
                         ledger.DateOfAllotment = DateOnly.FromDateTime(startDate);
                     ledger.MonthlyRent = assignment.MonthlyRent;
                     ledger.ElectricSecurity = assignment.SecurityDeposit;
+                    ledger.MiscRent = assignment.MiscRent;
+                    ledger.MiscChargeName = assignment.MiscChargeName;
                     ledger.TotalDue = ledger.Carryover + ledger.MonthlyRent + ledger.ElecCost + ledger.MiscRent;
                     ledger.ClosingBalance = ledger.TotalDue - ledger.AmountPaid;
                     ledger.UpdatedUtc = DateTime.UtcNow;
+                    if (string.IsNullOrEmpty(ledger.InvoiceNumber))
+                        ledger.InvoiceNumber = FormatInvoice(invoiceCounter++);
                 }
 
                 lastCreated = ledger;
                 period = period.AddMonths(1);
+            }
+
+            // Set initial ROOM security deposit on tenant (separate from electric security)
+            var roomDeposit = assignment.RoomSecurityDeposit;
+            if (roomDeposit > 0)
+            {
+                tenant.SecurityDeposit += roomDeposit;
+                tenant.UpdatedUtc = DateTime.UtcNow;
+
+                _context.SecurityDepositTransactions.Add(new SecurityDepositTransaction
+                {
+                    TenantId = assignment.TenantId,
+                    Amount = roomDeposit,
+                    Type = "Collection",
+                    Description = $"Initial room security deposit on assignment to {flat.RoomCode}"
+                });
             }
 
             await _context.SaveChangesAsync();
@@ -302,7 +350,7 @@ namespace RentalBackend.Controllers
         }
 
         /// <summary>
-        /// Vacate flat
+        /// Vacate flat — includes settlement (deposit vs outstanding)
         /// </summary>
         [HttpPost("{id}/vacate")]
         public async Task<ActionResult> VacateFlat(Guid id)
@@ -314,10 +362,61 @@ namespace RentalBackend.Controllers
             if (activeOcc == null)
                 return BadRequest("No active occupancy found for this flat.");
 
+            // Calculate total outstanding across all bills for this tenant+flat
+            var totalOutstanding = await _context.MonthlyLedgers
+                .Where(l => l.FlatId == id && l.TenantId == activeOcc.TenantId && l.ClosingBalance > 0)
+                .SumAsync(l => l.ClosingBalance);
+
+            var tenant = activeOcc.Tenant;
+            var depositBalance = tenant?.SecurityDeposit ?? 0;
+            var netRefund = depositBalance - totalOutstanding; // Positive = refund to tenant, Negative = tenant owes
+
+            // Record a Refund transaction for the deposit
+            if (tenant != null && depositBalance > 0)
+            {
+                var refundAmount = Math.Min(depositBalance, depositBalance); // full deposit returned/adjusted
+                _context.SecurityDepositTransactions.Add(new SecurityDepositTransaction
+                {
+                    TenantId = tenant.TenantId,
+                    Amount = -refundAmount,
+                    Type = "Refund",
+                    Description = $"Settlement on vacate from room {activeOcc.Flat?.RoomCode ?? id.ToString()[..8]}. Outstanding: ₹{totalOutstanding}, Deposit: ₹{depositBalance}, Net: ₹{netRefund}"
+                });
+
+                // If deposit covers outstanding, clear the bills
+                if (depositBalance >= totalOutstanding && totalOutstanding > 0)
+                {
+                    var outstandingLedgers = await _context.MonthlyLedgers
+                        .Where(l => l.FlatId == id && l.TenantId == activeOcc.TenantId && l.ClosingBalance > 0)
+                        .ToListAsync();
+                    foreach (var ledger in outstandingLedgers)
+                    {
+                        ledger.AmountPaid += ledger.ClosingBalance;
+                        ledger.ClosingBalance = 0;
+                        ledger.UpdatedUtc = DateTime.UtcNow;
+                    }
+                }
+
+                tenant.SecurityDeposit = 0;
+                tenant.UpdatedUtc = DateTime.UtcNow;
+            }
+
             activeOcc.EndDate = DateOnly.FromDateTime(DateTime.UtcNow);
             await _context.SaveChangesAsync();
 
-            return Ok(new { message = $"Flat vacated. Tenant '{activeOcc.Tenant?.Name}' removed." });
+            return Ok(new
+            {
+                message = $"Flat vacated. Tenant '{tenant?.Name}' removed.",
+                settlement = new
+                {
+                    depositBalance,
+                    totalOutstanding,
+                    netRefund,
+                    summary = netRefund >= 0
+                        ? $"Refund ₹{netRefund} to tenant"
+                        : $"Tenant owes ₹{Math.Abs(netRefund)}"
+                }
+            });
         }
 
         /// <summary>
@@ -480,7 +579,10 @@ namespace RentalBackend.Controllers
     {
         public Guid TenantId { get; set; }
         public decimal MonthlyRent { get; set; }
-        public decimal SecurityDeposit { get; set; }
+        public decimal SecurityDeposit { get; set; }  // Electric meter security (goes to ledger)
+        public decimal RoomSecurityDeposit { get; set; }  // Room security deposit (goes to tenant balance)
+        public decimal MiscRent { get; set; }
+        public string? MiscChargeName { get; set; }
         public DateTime? StartDate { get; set; }
     }
 
@@ -494,5 +596,7 @@ namespace RentalBackend.Controllers
     {
         public string RoomCode { get; set; } = string.Empty;
         public int? Floor { get; set; }
+        public string? MeterId { get; set; }
+        public decimal BaseRent { get; set; }
     }
 }

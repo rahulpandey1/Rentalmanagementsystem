@@ -59,8 +59,11 @@ app.controller('RoomsController', function ($scope, $http, apiService, $timeout,
         var now = new Date();
         $scope.assignment = {
             tenantId: '',
-            monthlyRent: room.monthlyRent,
+            monthlyRent: room.baseRent || room.monthlyRent,
             securityDeposit: 0,
+            roomSecurityDeposit: 0,
+            miscRent: 0,
+            miscChargeName: '',
             startDate: now.toISOString().split('T')[0]
         };
         var modal = new bootstrap.Modal(document.getElementById('assignTenantModal'));
@@ -77,6 +80,9 @@ app.controller('RoomsController', function ($scope, $http, apiService, $timeout,
             tenantId: $scope.assignment.tenantId,
             monthlyRent: $scope.assignment.monthlyRent,
             securityDeposit: $scope.assignment.securityDeposit,
+            roomSecurityDeposit: $scope.assignment.roomSecurityDeposit || 0,
+            miscRent: $scope.assignment.miscRent || 0,
+            miscChargeName: $scope.assignment.miscChargeName || null,
             startDate: $scope.assignment.startDate
         };
 

@@ -21,6 +21,27 @@ namespace RentalBackend.Controllers
         }
 
         /// <summary>
+        /// Generate next sequential invoice number (INV-000001, INV-000002, ...)
+        /// </summary>
+        private async Task<string> GenerateNextInvoiceNumber()
+        {
+            var maxInvoice = await _context.MonthlyLedgers
+                .Where(l => l.InvoiceNumber != null)
+                .OrderByDescending(l => l.InvoiceNumber)
+                .Select(l => l.InvoiceNumber)
+                .FirstOrDefaultAsync();
+
+            int nextNum = 1;
+            if (maxInvoice != null && maxInvoice.StartsWith("INV-") && 
+                int.TryParse(maxInvoice.Substring(4), out int currentNum))
+            {
+                nextNum = currentNum + 1;
+            }
+
+            return $"INV-{nextNum:D6}";
+        }
+
+        /// <summary>
         /// Get ledger entries for a specific month/year period
         /// </summary>
         [HttpGet]
@@ -58,6 +79,7 @@ namespace RentalBackend.Controllers
             var result = ledgers.Select(l => new
             {
                 Id = l.MonthlyLedgerId,
+                l.InvoiceNumber,
                 TenantName = l.Tenant?.Name ?? "VACANT",
                 RoomNumber = l.Flat?.RoomCode,
                 BillPeriod = l.Period.ToString("MMMM yyyy"),
@@ -65,7 +87,9 @@ namespace RentalBackend.Controllers
                 PaidAmount = l.AmountPaid,
                 ClosingBalance = l.ClosingBalance,
                 Status = l.ClosingBalance <= 0 ? "Paid" : "Pending",
-                
+                PaymentDate = l.PaymentDate?.ToString("dd-MMM-yyyy"),
+                TenantId = l.TenantId,
+                SecurityDeposit = l.Tenant != null ? l.Tenant.SecurityDeposit : 0,
                 // Details for Invoice
                 MonthlyRent = l.MonthlyRent,
                 ElectricAmount = l.ElecCost, 
@@ -77,7 +101,8 @@ namespace RentalBackend.Controllers
                 ElecPrev = l.ElecPrev,
                 ElecNew = l.ElecNew,
                 ElecUnits = l.ElecUnits,
-                ElecRate = l.ElecRate
+                ElecRate = l.ElecRate,
+                MiscChargeName = l.MiscChargeName
             });
 
             return Ok(result);
@@ -103,6 +128,7 @@ namespace RentalBackend.Controllers
             var result = ledgers.Select(l => new
             {
                 Id = l.MonthlyLedgerId,
+                l.InvoiceNumber,
                 TenantName = l.Tenant?.Name ?? "VACANT",
                 RoomNumber = l.Flat?.RoomCode,
                 BillPeriod = l.Period.ToString("MMMM yyyy"),
@@ -169,7 +195,8 @@ namespace RentalBackend.Controllers
                     ElecPrev = prevLedger?.ElecNew ?? 0,
                     ElecNew = prevLedger?.ElecNew ?? 0, 
                     ElecRate = prevLedger?.ElecRate ?? 12.0m, 
-                    MiscRent = 0, 
+                    MiscRent = prevLedger?.MiscRent ?? 0,
+                    MiscChargeName = prevLedger?.MiscChargeName,
                     
                     // Carryover is previous closing balance
                     Carryover = prevLedger?.ClosingBalance ?? 0,
@@ -180,6 +207,7 @@ namespace RentalBackend.Controllers
                 // Assuming ElecCost is calculated when readings are entered. For now just Rent + Carryover
                 newLedger.TotalDue = newLedger.Carryover + newLedger.MonthlyRent + newLedger.MiscRent;
                 newLedger.ClosingBalance = newLedger.TotalDue; // Assumes 0 paid initially
+                newLedger.InvoiceNumber = await GenerateNextInvoiceNumber();
 
                 _context.MonthlyLedgers.Add(newLedger);
                 generatedCount++;
@@ -224,7 +252,8 @@ namespace RentalBackend.Controllers
                     ElecPrev = existing?.ElecPrev ?? prevLedger?.ElecNew ?? 0,
                     ElecNew = existing?.ElecNew ?? prevLedger?.ElecNew ?? 0, // Default to prev reading if new
                     ElecRate = existing?.ElecRate ?? prevLedger?.ElecRate ?? 12.0m,
-                    MiscRent = existing?.MiscRent ?? 0,
+                    MiscRent = existing?.MiscRent ?? prevLedger?.MiscRent ?? 0,
+                    MiscChargeName = existing?.MiscChargeName ?? prevLedger?.MiscChargeName,
                     Carryover = existing?.Carryover ?? prevLedger?.ClosingBalance ?? 0,
                     IsGenerated = existing != null
                 });
@@ -252,9 +281,14 @@ namespace RentalBackend.Controllers
                         FlatId = item.FlatId,
                         TenantId = item.TenantId,
                         MonthlyLedgerId = Guid.NewGuid(),
-                        DateOfAllotment = period // approximation
+                        DateOfAllotment = period, // approximation
+                        InvoiceNumber = await GenerateNextInvoiceNumber()
                     };
                     _context.MonthlyLedgers.Add(ledger);
+                }
+                else if (string.IsNullOrEmpty(ledger.InvoiceNumber))
+                {
+                    ledger.InvoiceNumber = await GenerateNextInvoiceNumber();
                 }
 
                 // Update fields from preview
@@ -268,6 +302,7 @@ namespace RentalBackend.Controllers
                 ledger.ElecCost = ledger.ElecUnits * ledger.ElecRate;
                 
                 ledger.MiscRent = item.MiscRent;
+                ledger.MiscChargeName = item.MiscChargeName;
                 ledger.Carryover = item.Carryover; 
                 ledger.Remarks = string.Empty; // TODO: Add remarks to batch?
 
@@ -298,6 +333,7 @@ namespace RentalBackend.Controllers
             public decimal ElecNew { get; set; }
             public decimal ElecRate { get; set; }
             public decimal MiscRent { get; set; }
+            public string? MiscChargeName { get; set; }
             public decimal Carryover { get; set; }
         }
 
@@ -330,6 +366,11 @@ namespace RentalBackend.Controllers
                 ledger.MiscRent = model.MiscAmount.Value;
             }
 
+            if (model.MiscChargeName != null)
+            {
+                ledger.MiscChargeName = model.MiscChargeName;
+            }
+
             if (model.Remarks != null)
             {
                 ledger.Remarks = model.Remarks;
@@ -348,11 +389,156 @@ namespace RentalBackend.Controllers
             return Ok(new { message = "Bill updated successfully", ledger });
         }
 
+        /// <summary>
+        /// Record a payment against a bill (supports partial, exact, and overpayment)
+        /// </summary>
+        [HttpPut("{id}/record-payment")]
+        public async Task<IActionResult> RecordPayment([FromRoute] Guid id, [FromBody] RecordPaymentModel model)
+        {
+            var ledger = await _context.MonthlyLedgers
+                .Include(l => l.Flat)
+                .Include(l => l.Tenant)
+                .FirstOrDefaultAsync(l => l.MonthlyLedgerId == id);
+            if (ledger == null) return NotFound();
+
+            // Split payment: rentAmount goes to bill, depositAmount goes to security deposit
+            var depositAmount = model.SecurityDepositAmount;
+            var rentAmount = model.AmountPaid;
+
+            // Apply rent payment
+            ledger.AmountPaid = rentAmount;
+            ledger.PaymentDate = model.PaymentDate.HasValue 
+                ? DateOnly.FromDateTime(model.PaymentDate.Value) 
+                : DateOnly.FromDateTime(DateTime.UtcNow);
+            
+            // ClosingBalance = TotalDue - AmountPaid
+            ledger.ClosingBalance = ledger.TotalDue - ledger.AmountPaid;
+            ledger.UpdatedUtc = DateTime.UtcNow;
+
+            // Handle security deposit portion
+            if (depositAmount > 0 && ledger.TenantId.HasValue)
+            {
+                var tenant = await _context.Tenants.FindAsync(ledger.TenantId.Value);
+                if (tenant != null)
+                {
+                    tenant.SecurityDeposit += depositAmount;
+                    tenant.UpdatedUtc = DateTime.UtcNow;
+
+                    _context.SecurityDepositTransactions.Add(new SecurityDepositTransaction
+                    {
+                        TenantId = tenant.TenantId,
+                        Amount = depositAmount,
+                        Type = "TopUp",
+                        Description = $"Payment split: \u20b9{depositAmount} to deposit (bill {ledger.InvoiceNumber ?? ledger.Period.ToString("MMM yyyy")})"
+                    });
+                }
+            }
+
+            // Payment record for audit trail
+            var paymentRecord = await _context.Payments
+                .FirstOrDefaultAsync(p => p.Period == ledger.Period && p.FlatId == ledger.FlatId);
+            if (paymentRecord == null)
+            {
+                paymentRecord = new Payment
+                {
+                    Period = ledger.Period,
+                    FlatId = ledger.FlatId,
+                    TenantId = ledger.TenantId,
+                    Amount = rentAmount + depositAmount,
+                    PaymentDate = ledger.PaymentDate,
+                    Source = "Manual"
+                };
+                _context.Payments.Add(paymentRecord);
+            }
+            else
+            {
+                paymentRecord.Amount = rentAmount + depositAmount;
+                paymentRecord.PaymentDate = ledger.PaymentDate;
+            }
+
+            await _context.SaveChangesAsync();
+
+            var status = ledger.ClosingBalance <= 0 ? "Paid" : "Pending";
+            var depositNote = depositAmount > 0 ? $" + \u20b9{depositAmount} to deposit" : "";
+
+            return Ok(new { 
+                message = $"Payment of \u20b9{rentAmount} recorded for {ledger.Flat?.RoomCode}. Status: {status}{depositNote}",
+                invoiceNumber = ledger.InvoiceNumber,
+                totalDue = ledger.TotalDue,
+                amountPaid = ledger.AmountPaid,
+                closingBalance = ledger.ClosingBalance,
+                status
+            });
+        }
+
+        /// <summary>
+        /// Adjust bill from tenant's security deposit
+        /// </summary>
+        [HttpPost("{id}/adjust-from-deposit")]
+        public async Task<IActionResult> AdjustFromDeposit([FromRoute] Guid id, [FromBody] AdjustDepositModel model)
+        {
+            var ledger = await _context.MonthlyLedgers
+                .Include(l => l.Flat)
+                .Include(l => l.Tenant)
+                .FirstOrDefaultAsync(l => l.MonthlyLedgerId == id);
+            if (ledger == null) return NotFound();
+            if (ledger.TenantId == null) return BadRequest("No tenant associated with this bill.");
+
+            var tenant = await _context.Tenants.FindAsync(ledger.TenantId.Value);
+            if (tenant == null) return NotFound("Tenant not found.");
+
+            var adjustAmount = model.Amount > 0 ? model.Amount : ledger.ClosingBalance;
+            if (adjustAmount <= 0) return BadRequest("Nothing to adjust.");
+            if (adjustAmount > tenant.SecurityDeposit)
+                return BadRequest($"Insufficient deposit balance. Available: \u20b9{tenant.SecurityDeposit}");
+
+            // Deduct from deposit
+            tenant.SecurityDeposit -= adjustAmount;
+            tenant.UpdatedUtc = DateTime.UtcNow;
+
+            // Credit to bill
+            ledger.AmountPaid += adjustAmount;
+            ledger.ClosingBalance = ledger.TotalDue - ledger.AmountPaid;
+            ledger.UpdatedUtc = DateTime.UtcNow;
+
+            // Record transaction
+            _context.SecurityDepositTransactions.Add(new SecurityDepositTransaction
+            {
+                TenantId = tenant.TenantId,
+                Amount = -adjustAmount,
+                Type = "Adjustment",
+                Description = $"Adjusted \u20b9{adjustAmount} against {ledger.Flat?.RoomCode} {ledger.Period:MMM yyyy}"
+            });
+
+            await _context.SaveChangesAsync();
+
+            return Ok(new
+            {
+                message = $"\u20b9{adjustAmount} adjusted from deposit. Deposit balance: \u20b9{tenant.SecurityDeposit}",
+                adjustedAmount = adjustAmount,
+                securityDeposit = tenant.SecurityDeposit,
+                billBalance = ledger.ClosingBalance
+            });
+        }
+
+        public class RecordPaymentModel
+        {
+            public decimal AmountPaid { get; set; }
+            public decimal SecurityDepositAmount { get; set; } // Optional: portion going to deposit
+            public DateTime? PaymentDate { get; set; }
+        }
+
+        public class AdjustDepositModel
+        {
+            public decimal Amount { get; set; } // 0 = use full closing balance
+        }
+
         public class BillUpdateModel
         {
             public decimal? CurrentReading { get; set; }
             public decimal? MonthlyRent { get; set; }
             public decimal? MiscAmount { get; set; }
+            public string? MiscChargeName { get; set; }
             public string? Remarks { get; set; }
         }
     }

@@ -112,6 +112,43 @@ app.service('apiService', function ($http, $rootScope) {
         return $http.put(baseUrl + '/Bills/' + id, data);
     };
 
+    this.recordPayment = function (id, data) {
+        return $http.put(baseUrl + '/Bills/' + id + '/record-payment', data);
+    };
+
+    // Tenant Documents
+    this.getTenantDocuments = function (tenantId) {
+        return $http.get(baseUrl + '/Tenants/' + tenantId + '/documents');
+    };
+
+    this.uploadTenantDocument = function (tenantId, formData) {
+        return $http.post(baseUrl + '/Tenants/' + tenantId + '/documents', formData, {
+            headers: { 'Content-Type': undefined },
+            transformRequest: angular.identity
+        });
+    };
+
+    this.deleteTenantDocument = function (tenantId, docId) {
+        return $http.delete(baseUrl + '/Tenants/' + tenantId + '/documents/' + docId);
+    };
+
+    this.downloadTenantDocument = function (tenantId, docId) {
+        return baseUrl + '/Tenants/' + tenantId + '/documents/' + docId + '/download';
+    };
+
+    // Security Deposit
+    this.addTenantDeposit = function (tenantId, data) {
+        return $http.post(baseUrl + '/Tenants/' + tenantId + '/deposit', data);
+    };
+
+    this.getDepositHistory = function (tenantId) {
+        return $http.get(baseUrl + '/Tenants/' + tenantId + '/deposit-history');
+    };
+
+    this.adjustFromDeposit = function (billId, data) {
+        return $http.post(baseUrl + '/Bills/' + billId + '/adjust-from-deposit', data);
+    };
+
     // Audit Logs
     this.getAuditLogs = function (params) {
         var qs = [];

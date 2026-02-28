@@ -14,10 +14,12 @@ namespace RentalBackend.Controllers
     public class TenantsController : ControllerBase
     {
         private readonly RentManagementContext _context;
+        private readonly IWebHostEnvironment _env;
 
-        public TenantsController(RentManagementContext context)
+        public TenantsController(RentManagementContext context, IWebHostEnvironment env)
         {
             _context = context;
+            _env = env;
         }
 
         [HttpGet]
@@ -41,9 +43,11 @@ namespace RentalBackend.Controllers
                     Name = l.Tenant?.Name ?? "VACANT",
                     FirstName = l.Tenant?.Name ?? "VACANT",
                     LastName = "",
-                    PhoneNumber = (string?)null,
-                    Email = (string?)null,
-                    Address = (string?)null,
+                    PhoneNumber = l.Tenant?.Phone,
+                    Phone = l.Tenant?.Phone,
+                    Email = l.Tenant?.Email,
+                    FatherName = l.Tenant?.FatherName,
+                    Address = l.Tenant?.PermanentAddress,
                     IsActive = true,
                     IsAssigned = true,
                     RoomNumber = l.Flat?.RoomCode,
@@ -82,9 +86,11 @@ namespace RentalBackend.Controllers
                     t.Name,
                     FirstName = t.Name,
                     LastName = "",
-                    PhoneNumber = (string?)null,
-                    Email = (string?)null,
-                    Address = (string?)null,
+                    PhoneNumber = t.Phone,
+                    t.Phone,
+                    t.Email,
+                    t.FatherName,
+                    Address = t.PermanentAddress,
                     IsActive = true,
                     IsAssigned = activeOcc != null,
                     RoomNumber = activeOcc?.Flat?.RoomCode,
@@ -121,7 +127,10 @@ namespace RentalBackend.Controllers
                     t.Name,
                     FirstName = t.Name,
                     LastName = "",
-                    PhoneNumber = (string?)null
+                    PhoneNumber = t.Phone,
+                    t.Phone,
+                    t.TentativeRoomCode,
+                    t.TentativeRent
                 })
                 .ToListAsync();
 
@@ -134,6 +143,7 @@ namespace RentalBackend.Controllers
             var tenant = await _context.Tenants
                 .Include(t => t.Occupancies)
                     .ThenInclude(o => o.Flat)
+                .Include(t => t.Documents)
                 .FirstOrDefaultAsync(t => t.TenantId == id);
 
             if (tenant == null) return NotFound();
@@ -168,9 +178,19 @@ namespace RentalBackend.Controllers
                 tenant.Name,
                 FirstName = tenant.Name,
                 LastName = "",
-                PhoneNumber = (string?)null,
-                Email = (string?)null,
-                Address = (string?)null,
+                tenant.FatherName,
+                Phone = tenant.Phone,
+                PhoneNumber = tenant.Phone,
+                tenant.Email,
+                tenant.AadhaarNumber,
+                tenant.PanNumber,
+                tenant.PermanentAddress,
+                tenant.EmergencyContact,
+                tenant.EmergencyPhone,
+                tenant.TentativeRoomCode,
+                tenant.TentativeRent,
+                tenant.SecurityDeposit,
+                tenant.Notes,
                 IsActive = true,
                 IsAssigned = activeOcc != null,
                 RoomNumber = activeOcc?.Flat?.RoomCode,
@@ -185,7 +205,25 @@ namespace RentalBackend.Controllers
                     o.StartDate,
                     o.EndDate,
                     IsActive = o.EndDate == null
-                })
+                }),
+                Documents = tenant.Documents.OrderByDescending(d => d.UploadedUtc).Select(d => new
+                {
+                    d.DocumentId,
+                    d.DocumentType,
+                    d.FileName,
+                    d.UploadedUtc
+                }),
+                DepositHistory = _context.SecurityDepositTransactions
+                    .Where(dt => dt.TenantId == id)
+                    .OrderByDescending(dt => dt.CreatedUtc)
+                    .Select(dt => new
+                    {
+                        dt.TransactionId,
+                        dt.Amount,
+                        dt.Type,
+                        dt.Description,
+                        dt.CreatedUtc
+                    }).ToList()
             };
 
             return Ok(result);
@@ -206,7 +244,21 @@ namespace RentalBackend.Controllers
             if (exists)
                 return BadRequest($"Tenant '{name}' already exists.");
 
-            var tenant = new Tenant { Name = name };
+            var tenant = new Tenant
+            {
+                Name = name,
+                FatherName = request.FatherName,
+                Phone = request.PhoneNumber ?? request.Phone,
+                Email = request.Email,
+                AadhaarNumber = request.AadhaarNumber,
+                PanNumber = request.PanNumber,
+                PermanentAddress = request.Address ?? request.PermanentAddress,
+                EmergencyContact = request.EmergencyContact,
+                EmergencyPhone = request.EmergencyPhone,
+                TentativeRoomCode = request.TentativeRoomCode,
+                TentativeRent = request.TentativeRent,
+                Notes = request.Notes
+            };
             _context.Tenants.Add(tenant);
             await _context.SaveChangesAsync();
 
@@ -290,11 +342,188 @@ namespace RentalBackend.Controllers
             else if (!string.IsNullOrWhiteSpace(request.FirstName))
                 tenant.Name = $"{request.FirstName} {request.LastName}".Trim();
 
+            if (request.FatherName != null) tenant.FatherName = request.FatherName;
+            if (request.Phone != null) tenant.Phone = request.Phone;
+            else if (request.PhoneNumber != null) tenant.Phone = request.PhoneNumber;
+            if (request.Email != null) tenant.Email = request.Email;
+            if (request.AadhaarNumber != null) tenant.AadhaarNumber = request.AadhaarNumber;
+            if (request.PanNumber != null) tenant.PanNumber = request.PanNumber;
+            if (request.PermanentAddress != null) tenant.PermanentAddress = request.PermanentAddress;
+            else if (request.Address != null) tenant.PermanentAddress = request.Address;
+            if (request.EmergencyContact != null) tenant.EmergencyContact = request.EmergencyContact;
+            if (request.EmergencyPhone != null) tenant.EmergencyPhone = request.EmergencyPhone;
+            if (request.TentativeRoomCode != null) tenant.TentativeRoomCode = request.TentativeRoomCode;
+            if (request.TentativeRent.HasValue) tenant.TentativeRent = request.TentativeRent.Value;
+            if (request.Notes != null) tenant.Notes = request.Notes;
+
             tenant.UpdatedUtc = DateTime.UtcNow;
             await _context.SaveChangesAsync();
 
             return Ok(new { message = "Tenant updated." });
         }
+
+        // === Document management ===
+
+        [HttpGet("{id}/documents")]
+        public async Task<ActionResult> GetDocuments(Guid id)
+        {
+            var docs = await _context.TenantDocuments
+                .Where(d => d.TenantId == id)
+                .OrderByDescending(d => d.UploadedUtc)
+                .Select(d => new
+                {
+                    d.DocumentId,
+                    d.DocumentType,
+                    d.FileName,
+                    d.UploadedUtc
+                })
+                .ToListAsync();
+
+            return Ok(docs);
+        }
+
+        [HttpPost("{id}/documents")]
+        [DisableRequestSizeLimit]
+        public async Task<ActionResult> UploadDocument(Guid id, [FromForm] IFormFile file, [FromForm] string? documentType)
+        {
+            var tenant = await _context.Tenants.FindAsync(id);
+            if (tenant == null) return NotFound("Tenant not found.");
+
+            if (file == null || file.Length == 0)
+                return BadRequest("No file provided.");
+
+            // Max 10MB
+            if (file.Length > 10 * 1024 * 1024)
+                return BadRequest("File size exceeds 10MB limit.");
+
+            var uploadsDir = Path.Combine(_env.WebRootPath ?? Path.Combine(_env.ContentRootPath, "wwwroot"),
+                "uploads", "tenants", id.ToString());
+            Directory.CreateDirectory(uploadsDir);
+
+            // Generate unique filename
+            var ext = Path.GetExtension(file.FileName);
+            var storedName = $"{Guid.NewGuid():N}{ext}";
+            var filePath = Path.Combine(uploadsDir, storedName);
+
+            using (var stream = new FileStream(filePath, FileMode.Create))
+            {
+                await file.CopyToAsync(stream);
+            }
+
+            var doc = new TenantDocument
+            {
+                TenantId = id,
+                DocumentType = documentType ?? "Other",
+                FileName = file.FileName,
+                FilePath = filePath
+            };
+            _context.TenantDocuments.Add(doc);
+            await _context.SaveChangesAsync();
+
+            return Ok(new
+            {
+                message = $"Document '{file.FileName}' uploaded.",
+                documentId = doc.DocumentId,
+                doc.DocumentType,
+                doc.FileName
+            });
+        }
+
+        [HttpGet("{id}/documents/{docId}/download")]
+        public async Task<ActionResult> DownloadDocument(Guid id, Guid docId)
+        {
+            var doc = await _context.TenantDocuments
+                .FirstOrDefaultAsync(d => d.DocumentId == docId && d.TenantId == id);
+
+            if (doc == null) return NotFound();
+
+            if (!System.IO.File.Exists(doc.FilePath))
+                return NotFound("File not found on disk.");
+
+            var bytes = await System.IO.File.ReadAllBytesAsync(doc.FilePath);
+            var contentType = "application/octet-stream";
+            return File(bytes, contentType, doc.FileName);
+        }
+
+        [HttpDelete("{id}/documents/{docId}")]
+        public async Task<ActionResult> DeleteDocument(Guid id, Guid docId)
+        {
+            var doc = await _context.TenantDocuments
+                .FirstOrDefaultAsync(d => d.DocumentId == docId && d.TenantId == id);
+
+            if (doc == null) return NotFound();
+
+            // Delete file from disk
+            if (System.IO.File.Exists(doc.FilePath))
+                System.IO.File.Delete(doc.FilePath);
+
+            _context.TenantDocuments.Remove(doc);
+            await _context.SaveChangesAsync();
+
+            return Ok(new { message = $"Document '{doc.FileName}' deleted." });
+        }
+
+        // === Security Deposit Management ===
+
+        [HttpPost("{id}/deposit")]
+        public async Task<ActionResult> AddDeposit(Guid id, [FromBody] DepositRequest request)
+        {
+            var tenant = await _context.Tenants.FindAsync(id);
+            if (tenant == null) return NotFound("Tenant not found.");
+            if (request.Amount <= 0) return BadRequest("Amount must be positive.");
+
+            var type = string.IsNullOrEmpty(request.Type) ? "TopUp" : request.Type;
+
+            tenant.SecurityDeposit += request.Amount;
+            tenant.UpdatedUtc = DateTime.UtcNow;
+
+            _context.SecurityDepositTransactions.Add(new SecurityDepositTransaction
+            {
+                TenantId = id,
+                Amount = request.Amount,
+                Type = type,
+                Description = request.Description ?? $"{type}: ₹{request.Amount}"
+            });
+
+            await _context.SaveChangesAsync();
+
+            return Ok(new
+            {
+                message = $"₹{request.Amount} added to security deposit. New balance: ₹{tenant.SecurityDeposit}",
+                securityDeposit = tenant.SecurityDeposit
+            });
+        }
+
+        [HttpGet("{id}/deposit-history")]
+        public async Task<ActionResult> GetDepositHistory(Guid id)
+        {
+            var history = await _context.SecurityDepositTransactions
+                .Where(dt => dt.TenantId == id)
+                .OrderByDescending(dt => dt.CreatedUtc)
+                .Select(dt => new
+                {
+                    dt.TransactionId,
+                    dt.Amount,
+                    dt.Type,
+                    dt.Description,
+                    dt.CreatedUtc
+                })
+                .ToListAsync();
+
+            var tenant = await _context.Tenants.FindAsync(id);
+            return Ok(new
+            {
+                currentBalance = tenant?.SecurityDeposit ?? 0,
+                transactions = history
+            });
+        }
+    }
+
+    public class DepositRequest
+    {
+        public decimal Amount { get; set; }
+        public string? Type { get; set; } // Collection, TopUp
+        public string? Description { get; set; }
     }
 
     public class TenantCreateRequest
@@ -302,9 +531,19 @@ namespace RentalBackend.Controllers
         public string? Name { get; set; }
         public string? FirstName { get; set; }
         public string? LastName { get; set; }
+        public string? FatherName { get; set; }
         public string? PhoneNumber { get; set; }
+        public string? Phone { get; set; }
         public string? Email { get; set; }
         public string? Address { get; set; }
+        public string? PermanentAddress { get; set; }
+        public string? AadhaarNumber { get; set; }
+        public string? PanNumber { get; set; }
+        public string? EmergencyContact { get; set; }
+        public string? EmergencyPhone { get; set; }
+        public string? TentativeRoomCode { get; set; }
+        public decimal TentativeRent { get; set; }
+        public string? Notes { get; set; }
         public string? IdProofType { get; set; }
         public string? IdProofNumber { get; set; }
         public Guid? FlatId { get; set; }
@@ -328,9 +567,19 @@ namespace RentalBackend.Controllers
         public string? Name { get; set; }
         public string? FirstName { get; set; }
         public string? LastName { get; set; }
+        public string? FatherName { get; set; }
         public string? PhoneNumber { get; set; }
+        public string? Phone { get; set; }
         public string? Email { get; set; }
         public string? Address { get; set; }
+        public string? PermanentAddress { get; set; }
+        public string? AadhaarNumber { get; set; }
+        public string? PanNumber { get; set; }
+        public string? EmergencyContact { get; set; }
+        public string? EmergencyPhone { get; set; }
+        public string? TentativeRoomCode { get; set; }
+        public decimal? TentativeRent { get; set; }
+        public string? Notes { get; set; }
         public bool IsActive { get; set; } = true;
     }
 }

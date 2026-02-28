@@ -80,12 +80,13 @@
                 <table class="table">
                     <thead>
                         <tr>
-                            <th>Ref #</th>
+                            <th>Invoice #</th>
                             <th>Tenant</th>
                             <th>Room</th>
                             <th>Period</th>
                             <th>Readings</th>
                             <th>Rent</th>
+                            <th>Misc</th>
                             <th>Total</th>
                             <th>Paid</th>
                             <th>Status</th>
@@ -94,7 +95,7 @@
                     </thead>
                     <tbody>
                         <tr ng-repeat="bill in bills | limitTo:20">
-                            <td>{{ bill.billNumber }}</td>
+                            <td><small>{{ bill.invoiceNumber || '-' }}</small></td>
                             <td>{{ bill.tenantName }}</td>
                             <td>{{ bill.roomNumber }}</td>
                             <td>{{ bill.billPeriod }}</td>
@@ -118,6 +119,15 @@
                                 <small class="text-muted" ng-if="bill.totalAmount">Total: {{bill.totalAmount |
                                     number}}</small>
                             </td>
+                            <td>
+                                <div class="input-group input-group-sm" style="width: 160px;">
+                                    <input type="text" class="form-control" ng-model="bill.miscChargeName"
+                                        placeholder="Name" style="width: 70px;">
+                                    <span class="input-group-text">₹</span>
+                                    <input type="number" class="form-control" ng-model="bill.miscAmount" placeholder="0"
+                                        style="width: 60px;">
+                                </div>
+                            </td>
                             <td>₹{{ bill.totalAmount | number }}</td>
                             <td class="text-success">₹{{ bill.paidAmount | number }}</td>
                             <td>
@@ -127,9 +137,27 @@
                                 </span>
                             </td>
                             <td>
-                                <button class="btn btn-sm btn-outline-secondary" ng-click="printBill(bill)">
-                                    <i class="fas fa-print"></i> Print
-                                </button>
+                                <div class="btn-group btn-group-sm">
+                                    <button class="btn btn-outline-success" ng-click="openRecordPayment(bill)"
+                                        title="Record Payment">
+                                        <i class="fas fa-money-bill-wave"></i>
+                                    </button>
+                                    <button class="btn btn-outline-warning" ng-click="adjustFromDeposit(bill)"
+                                        title="Adjust from Security Deposit"
+                                        ng-if="bill.closingBalance > 0 && bill.securityDeposit > 0">
+                                        <i class="fas fa-shield-alt"></i>
+                                    </button>
+                                    <button class="btn btn-outline-secondary" ng-click="printBill(bill)" title="Print">
+                                        <i class="fas fa-print"></i>
+                                    </button>
+                                </div>
+                                <div ng-if="bill.securityDeposit > 0">
+                                    <small class="text-info"><i class="fas fa-shield-alt"></i> Deposit: ₹{{
+                                        bill.securityDeposit | number }}</small>
+                                </div>
+                                <div ng-if="bill.paymentDate">
+                                    <small class="text-muted">Paid: {{ bill.paymentDate }}</small>
+                                </div>
                             </td>
                         </tr>
                     </tbody>
@@ -195,7 +223,7 @@
             </div>
             <div class="col-6 text-end">
                 <p>
-                    <strong>Invoice #:</strong> {{ bill.billNumber }}<br>
+                    <strong>Invoice #:</strong> {{ bill.invoiceNumber || bill.billNumber }}<br>
                     <strong>Period:</strong> {{ bill.billPeriod }}
                 </p>
             </div>
@@ -224,7 +252,7 @@
                     <td class="text-end">₹{{ bill.electricAmount | number }}</td>
                 </tr>
                 <tr ng-if="bill.miscAmount > 0">
-                    <td>Miscellaneous Charges</td>
+                    <td>{{ bill.miscChargeName || 'Miscellaneous Charges' }}</td>
                     <td class="text-end">₹{{ bill.miscAmount | number }}</td>
                 </tr>
                 <tr ng-if="bill.carryover > 0">
@@ -282,7 +310,10 @@
                             <th>Tenant</th>
                             <th>Prev Reading</th>
                             <th>Current Reading</th>
+                            <th>Rate (₹/unit)</th>
                             <th>Monthly Rent</th>
+                            <th>Misc Charge</th>
+                            <th>Misc Amount</th>
                             <th>Status</th>
                         </tr>
                     </thead>
@@ -296,7 +327,19 @@
                                     placeholder="Enter Reading">
                             </td>
                             <td>
+                                <input type="number" class="form-control form-control-sm" ng-model="item.elecRate"
+                                    style="width: 80px;">
+                            </td>
+                            <td>
                                 <input type="number" class="form-control form-control-sm" ng-model="item.monthlyRent">
+                            </td>
+                            <td>
+                                <input type="text" class="form-control form-control-sm" ng-model="item.miscChargeName"
+                                    placeholder="Name">
+                            </td>
+                            <td>
+                                <input type="number" class="form-control form-control-sm" ng-model="item.miscRent"
+                                    placeholder="0">
                             </td>
                             <td>
                                 <span class="badge"
@@ -313,6 +356,81 @@
                 <button type="button" class="btn btn-primary" ng-click="confirmGenerate()"
                     ng-disabled="$parent.previewBills.length === 0">
                     <i class="fas fa-magic me-1"></i> Confirm & Generate
+                </button>
+            </div>
+        </div>
+    </div>
+</div>
+
+<!-- Record Payment Modal -->
+<div class="modal fade" id="recordPaymentModal" tabindex="-1">
+    <div class="modal-dialog">
+        <div class="modal-content">
+            <div class="modal-header bg-soft-success">
+                <h5 class="modal-title"><i class="fas fa-money-bill-wave"></i> Record Payment</h5>
+                <button type="button" class="btn-close" data-bs-dismiss="modal"></button>
+            </div>
+            <div class="modal-body" ng-if="paymentBill">
+                <div class="alert alert-info">
+                    <div><strong>Invoice:</strong> {{ paymentBill.invoiceNumber }}</div>
+                    <div><strong>Room:</strong> {{ paymentBill.roomNumber }} — {{ paymentBill.tenantName }}</div>
+                    <div><strong>Period:</strong> {{ paymentBill.billPeriod }}</div>
+                    <hr>
+                    <div class="row">
+                        <div class="col-6"><strong>Total Due:</strong> ₹{{ paymentBill.totalAmount | number }}</div>
+                        <div class="col-6"><strong>Already Paid:</strong> ₹{{ paymentBill.paidAmount | number }}</div>
+                    </div>
+                    <div><strong>Balance:</strong>
+                        <span
+                            ng-class="{'text-danger': paymentBill.closingBalance > 0, 'text-success': paymentBill.closingBalance <= 0}">
+                            ₹{{ paymentBill.closingBalance | number }}
+                        </span>
+                    </div>
+                    <div ng-if="paymentBill.securityDeposit > 0">
+                        <strong>Security Deposit:</strong>
+                        <span class="text-info">₹{{ paymentBill.securityDeposit | number }}</span>
+                    </div>
+                </div>
+
+                <div class="mb-3">
+                    <label class="form-label">Rent Payment (₹) *</label>
+                    <input type="number" class="form-control form-control-lg" ng-model="payment.amountPaid"
+                        placeholder="Amount toward rent" required>
+                </div>
+                <div class="mb-3">
+                    <label class="form-label">Security Deposit Top-up (₹)</label>
+                    <input type="number" class="form-control" ng-model="payment.securityDepositAmount"
+                        placeholder="0 — optional amount toward deposit">
+                    <small class="text-muted">Extra amount the tenant is adding to their security deposit</small>
+                </div>
+                <div class="mb-3">
+                    <label class="form-label">Payment Date</label>
+                    <input type="date" class="form-control" ng-model="payment.paymentDate">
+                </div>
+
+                <div class="alert alert-info" ng-if="payment.securityDepositAmount > 0">
+                    <i class="fas fa-info-circle"></i>
+                    Total received: ₹{{ (payment.amountPaid || 0) + (payment.securityDepositAmount || 0) | number }}
+                    (₹{{ payment.amountPaid || 0 | number }} rent + ₹{{ payment.securityDepositAmount || 0 | number }}
+                    deposit)
+                </div>
+                <div class="alert alert-warning"
+                    ng-if="payment.amountPaid && payment.amountPaid < paymentBill.closingBalance && !payment.securityDepositAmount">
+                    <i class="fas fa-exclamation-triangle"></i>
+                    Partial payment: ₹{{ paymentBill.closingBalance - payment.amountPaid | number }} will carry forward.
+                </div>
+                <div class="alert alert-success"
+                    ng-if="payment.amountPaid && payment.amountPaid > paymentBill.totalAmount">
+                    <i class="fas fa-gift"></i>
+                    Overpayment: ₹{{ payment.amountPaid - paymentBill.totalAmount | number }} will be kept as advance
+                    credit.
+                </div>
+            </div>
+            <div class="modal-footer">
+                <button type="button" class="btn btn-secondary" data-bs-dismiss="modal">Cancel</button>
+                <button type="button" class="btn btn-success" ng-click="confirmRecordPayment()"
+                    ng-disabled="!payment.amountPaid">
+                    <i class="fas fa-check"></i> Record Payment
                 </button>
             </div>
         </div>

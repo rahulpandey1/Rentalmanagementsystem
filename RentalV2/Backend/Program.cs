@@ -217,6 +217,84 @@ try
                     logger.LogWarning(ex, "AuditLogs table creation SQL completed with warning (table may already exist).");
                 }
 
+                // Add new columns for meter & billing enhancements
+                try
+                {
+                    await context.Database.ExecuteSqlRawAsync(@"
+                        DO $$ BEGIN
+                            ALTER TABLE public.""Flats"" ADD COLUMN IF NOT EXISTS ""MeterId"" varchar(100);
+                            ALTER TABLE public.""Flats"" ADD COLUMN IF NOT EXISTS ""BaseRent"" numeric(12,2) NOT NULL DEFAULT 0;
+                            ALTER TABLE public.""MonthlyLedgers"" ADD COLUMN IF NOT EXISTS ""MiscChargeName"" varchar(255);
+                            ALTER TABLE public.""MonthlyLedgers"" ADD COLUMN IF NOT EXISTS ""InvoiceNumber"" varchar(20);
+                        END $$;
+                        CREATE UNIQUE INDEX IF NOT EXISTS ""IX_MonthlyLedgers_InvoiceNumber"" 
+                            ON public.""MonthlyLedgers"" (""InvoiceNumber"") WHERE ""InvoiceNumber"" IS NOT NULL;
+                    ");
+                    logger.LogInformation("Meter & billing columns verified/added.");
+                }
+                catch (Exception ex)
+                {
+                    logger.LogWarning(ex, "Meter & billing columns migration completed with warning.");
+                }
+
+                // Tenant profile & documents migration
+                try
+                {
+                    await context.Database.ExecuteSqlRawAsync(@"
+                        DO $$ BEGIN
+                            ALTER TABLE public.""Tenants"" ADD COLUMN IF NOT EXISTS ""FatherName"" varchar(255);
+                            ALTER TABLE public.""Tenants"" ADD COLUMN IF NOT EXISTS ""Phone"" varchar(20);
+                            ALTER TABLE public.""Tenants"" ADD COLUMN IF NOT EXISTS ""Email"" varchar(255);
+                            ALTER TABLE public.""Tenants"" ADD COLUMN IF NOT EXISTS ""AadhaarNumber"" varchar(20);
+                            ALTER TABLE public.""Tenants"" ADD COLUMN IF NOT EXISTS ""PanNumber"" varchar(20);
+                            ALTER TABLE public.""Tenants"" ADD COLUMN IF NOT EXISTS ""PermanentAddress"" varchar(1000);
+                            ALTER TABLE public.""Tenants"" ADD COLUMN IF NOT EXISTS ""EmergencyContact"" varchar(255);
+                            ALTER TABLE public.""Tenants"" ADD COLUMN IF NOT EXISTS ""EmergencyPhone"" varchar(20);
+                            ALTER TABLE public.""Tenants"" ADD COLUMN IF NOT EXISTS ""TentativeRoomCode"" varchar(50);
+                            ALTER TABLE public.""Tenants"" ADD COLUMN IF NOT EXISTS ""TentativeRent"" numeric(12,2) NOT NULL DEFAULT 0;
+                            ALTER TABLE public.""Tenants"" ADD COLUMN IF NOT EXISTS ""Notes"" varchar(2000);
+                        END $$;
+
+                        CREATE TABLE IF NOT EXISTS public.""TenantDocuments"" (
+                            ""DocumentId"" uuid PRIMARY KEY DEFAULT gen_random_uuid(),
+                            ""TenantId"" uuid NOT NULL REFERENCES public.""Tenants""(""TenantId"") ON DELETE CASCADE,
+                            ""DocumentType"" varchar(50) NOT NULL DEFAULT 'Other',
+                            ""FileName"" varchar(255) NOT NULL DEFAULT '',
+                            ""FilePath"" varchar(500) NOT NULL DEFAULT '',
+                            ""UploadedUtc"" timestamp NOT NULL DEFAULT now()
+                        );
+                    ");
+                    logger.LogInformation("Tenant profile columns & documents table verified/added.");
+                }
+                catch (Exception ex)
+                {
+                    logger.LogWarning(ex, "Tenant profile migration completed with warning.");
+                }
+
+                // Security deposit migration
+                try
+                {
+                    await context.Database.ExecuteSqlRawAsync(@"
+                        DO $$ BEGIN
+                            ALTER TABLE public.""Tenants"" ADD COLUMN IF NOT EXISTS ""SecurityDeposit"" numeric(12,2) NOT NULL DEFAULT 0;
+                        END $$;
+
+                        CREATE TABLE IF NOT EXISTS public.""SecurityDepositTransactions"" (
+                            ""TransactionId"" uuid PRIMARY KEY DEFAULT gen_random_uuid(),
+                            ""TenantId"" uuid NOT NULL REFERENCES public.""Tenants""(""TenantId"") ON DELETE CASCADE,
+                            ""Amount"" numeric(12,2) NOT NULL DEFAULT 0,
+                            ""Type"" varchar(50) NOT NULL DEFAULT 'Collection',
+                            ""Description"" varchar(500),
+                            ""CreatedUtc"" timestamp NOT NULL DEFAULT now()
+                        );
+                    ");
+                    logger.LogInformation("Security deposit columns & transactions table verified/added.");
+                }
+                catch (Exception ex)
+                {
+                    logger.LogWarning(ex, "Security deposit migration completed with warning.");
+                }
+
                 // Diagnostic: list all tables in the database
                 using var cmd = context.Database.GetDbConnection().CreateCommand();
                 await context.Database.OpenConnectionAsync();
